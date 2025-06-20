@@ -1,11 +1,13 @@
 import jwt from "jsonwebtoken";
 import User from "../models/userModel.js";
+import { verifyAccessToken, verifyRefreshToken, generateAccessToken, generateRefreshToken } from "../utils/jwt.js";
 
 export const verifyToken = async function (req, res, next) {
-  console.log("Inside verifytoken function");
-  const accessToken = req.cookies["accessToken"];
-
-  console.log(accessToken);
+  let accessToken = req.cookies["accessToken"];
+  // Check Authorization header if not in cookie
+  if (!accessToken && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    accessToken = req.headers.authorization.split(' ')[1];
+  }
 
   if (!accessToken) {
     return res.status(401).json({ message: `No token, authorization denied` });
@@ -96,3 +98,6 @@ export const isAdmin = function (req, res, next) {
 //     next();
 //   };
 // };
+
+// Combines verifyToken and isAdmin for admin-only routes
+export const verifyAdmin = [verifyToken, isAdmin];

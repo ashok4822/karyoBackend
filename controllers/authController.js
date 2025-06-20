@@ -63,6 +63,7 @@ export const registerUser = async function (req, res) {
         httpOnly: true,
         secure: isProduction,
         sameSite: isProduction ? "Strict" : "Lax",
+        path: '/',
       });
       res.status(201).json({ user: { id: savedUserData.id, role: savedUserData.role }, token: accessToken });
     }
@@ -102,6 +103,7 @@ export const loginUser = async function (req, res) {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "Strict" : "Lax",
+      path: '/',
     });
 
     res.status(201).json({ user: { id: user.id, role: user.role }, token: accessToken });
@@ -159,6 +161,7 @@ export const verifyOtp = async (req, res) => {
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? "Strict" : "Lax",
+    path: '/',
   });
   res.status(201).json({ user: { id: user.id, role: user.role }, token: accessToken });
 };

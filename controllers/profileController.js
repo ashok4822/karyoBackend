@@ -14,6 +14,25 @@ export const logout = async function (req, res) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax",
+      path: '/',
+    });
+    res.status(200).json({ message: `Successfully Logged out!` });
+  } catch (error) {
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
+export const adminLogout = async function (req, res) {
+  try {
+    const refreshToken = req.cookies["refreshToken"];
+    if (refreshToken) {
+      await User.updateOne({ refreshToken }, { $set: { refreshToken: "" } });
+    }
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax",
+      path: '/admin',
     });
     res.status(200).json({ message: `Successfully Logged out!` });
   } catch (error) {

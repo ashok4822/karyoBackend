@@ -24,6 +24,7 @@ export const adminLogin = async function (req, res) {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "Strict" : "Lax",
+      path: '/admin'
     });
     res
       .status(200)
@@ -40,13 +41,16 @@ export const getUsersPaginated = async function (req, res) {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 5;
     const search = req.query.search || "";
-    const query = {
-      isDeleted: false,
+    const status = req.query.status; // 'active', 'blocked', or undefined
+    let query = {
       $or: [
         { email: { $regex: search, $options: "i" } },
         { username: { $regex: search, $options: "i" } },
       ],
     };
+    if (status === 'active') query.isDeleted = false;
+    else if (status === 'blocked') query.isDeleted = true;
+    // else show all users
     const total = await User.countDocuments(query);
     const users = await User.find(query)
       .sort({ createdAt: -1 })
