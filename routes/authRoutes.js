@@ -3,6 +3,7 @@ import validateUser from "../utils/validateUser.js";
 import { loginUser, registerUser, requestOtp, verifyOtp, requestPasswordResetOtp, verifyPasswordResetOtp, resetPassword, refreshToken } from "../controllers/authController.js";
 import { logout, adminLogout } from "../controllers/profileController.js";
 import passport from "passport";
+import { generateAccessToken, generateRefreshToken } from "../utils/jwt.js";
 
 const router = express.Router();
 
@@ -24,8 +25,19 @@ router.get(
   "/google/callback",
   passport.authenticate("google", { failureRedirect: "/login", session: false }),
   (req, res) => {
-    // You can set a cookie or JWT here if needed
-    res.redirect("http://localhost:8080/"); // Redirect to frontend after login
+    // Generate JWT tokens
+    const accessToken = generateAccessToken(req.user);
+    const refreshToken = generateRefreshToken(req.user);
+    const isProduction = process.env.NODE_ENV === "production";
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "Strict" : "Lax",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+    // Redirect to frontend with access token in URL
+    res.redirect(`http://localhost:8080/google-auth-success?token=${accessToken}`);
   }
 );
 

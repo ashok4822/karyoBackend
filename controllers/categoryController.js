@@ -117,4 +117,17 @@ export const restoreCategory = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: `Internal Server Error: ${error.message}` });
   }
+};
+
+// Get all active categories for user-facing components
+export const getActiveCategories = async (req, res) => {
+  try {
+    const categories = await Category.find({ status: 'active' })
+      .sort({ name: 1 })
+      .select('name _id');
+    
+    res.json({ categories });
+  } catch (error) {
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+  }
 }; 

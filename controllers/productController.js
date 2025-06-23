@@ -5,6 +5,13 @@ import sharp from 'sharp';
 import fs from 'fs';
 import mongoose from 'mongoose';
 
+// Add this helper at the top of the file (or in a utils file and import it)
+async function updateProductTotalStock(productId) {
+  const allVariants = await ProductVariant.find({ product: productId });
+  const totalStock = allVariants.reduce((sum, v) => sum + (v.stock || 0), 0);
+  await Product.findByIdAndUpdate(productId, { totalStock });
+}
+
 export const addProduct = async (req, res) => {
   try {
     console.log('AddProduct request body:', req.body);
@@ -47,10 +54,6 @@ export const addProduct = async (req, res) => {
           return res.status(400).json({ message: 'Variants must be an array' });
         }
         
-        if (variantList.length === 0) {
-          return res.status(400).json({ message: 'At least one variant required when variants are enabled' });
-        }
-        
         // Validate each variant
         for (let i = 0; i < variantList.length; i++) {
           const variant = variantList[i];
@@ -61,6 +64,8 @@ export const addProduct = async (req, res) => {
           }
           if (!variant.capacity || !variant.capacity.trim()) {
             variantErrors.push('capacity is required');
+          } else if (!/^\d+(\.\d+)*L$/.test(variant.capacity.trim())) {
+            variantErrors.push('Invalid capacity. Must start with a number, can have dots (not at the beginning or end), and end with a capital L.');
           }
           if (!variant.price || variant.price <= 0) {
             variantErrors.push('valid price is required');
@@ -155,8 +160,8 @@ export const addProduct = async (req, res) => {
           let buffer;
           try {
             buffer = await sharp(file.path)
-              .resize(600, 600, { fit: 'cover' })
-              .toBuffer();
+            .resize(600, 600, { fit: 'cover' })
+            .toBuffer();
           } catch (sharpError) {
             console.error('Sharp error:', sharpError);
             throw new Error(`Failed to process image ${file.originalname}: ${sharpError.message}`);
@@ -171,7 +176,7 @@ export const addProduct = async (req, res) => {
           let result;
           try {
             result = await cloudinary.uploader.upload(tempPath, { folder: 'products' });
-            imageUrls.push(result.secure_url);
+          imageUrls.push(result.secure_url);
             console.log(`Uploaded product image ${i + 1} to Cloudinary:`, result.secure_url);
           } catch (cloudinaryError) {
             console.error('Cloudinary upload error:', cloudinaryError);
@@ -243,8 +248,8 @@ export const addProduct = async (req, res) => {
             let buffer;
             try {
               buffer = await sharp(file.path)
-                .resize(600, 600, { fit: 'cover' })
-                .toBuffer();
+              .resize(600, 600, { fit: 'cover' })
+              .toBuffer();
             } catch (sharpError) {
               console.error('Sharp error:', sharpError);
               throw new Error(`Failed to process image ${file.originalname}: ${sharpError.message}`);
@@ -258,12 +263,12 @@ export const addProduct = async (req, res) => {
             let result;
             try {
               result = await cloudinary.uploader.upload(tempPath, { folder: 'product-variants' });
-              variantImageUrls.push(result.secure_url);
+            variantImageUrls.push(result.secure_url);
               console.log(`Uploaded variant ${i + 1} image to Cloudinary:`, result.secure_url);
             } catch (cloudinaryError) {
               console.error('Cloudinary upload error:', cloudinaryError);
               throw new Error(`Failed to upload image ${file.originalname} to Cloudinary: ${cloudinaryError.message}`);
-            }
+          }
           }
         } catch (processingError) {
           console.error('Variant image processing error:', processingError);
@@ -313,16 +318,8 @@ export const addProduct = async (req, res) => {
       product.variants = variantIds;
       product.totalStock = totalStock;
       
-      // Auto-update product status based on stock
-      if (totalStock === 0) {
-        product.status = 'inactive';
-      } else if (totalStock < 10) {
-        product.status = 'active';
-      } else {
-        product.status = 'active';
-      }
+      // Do not override product.status here; allow admin to set status explicitly
       
-      console.log('Updating product with variants:', product._id);
       await product.save();
     }
     
@@ -355,23 +352,82 @@ export const addProduct = async (req, res) => {
 // List products with pagination, search, filter
 export const listProducts = async (req, res) => {
   try {
-    const { page = 1, limit = 5, search = '', status, category, brand, variantColour, variantCapacity } = req.query;
+    const { page = 1, limit = 5, search = '', status, category, brand, variantColour, variantCapacity, minPrice, maxPrice, sort = 'newest' } = req.query;
     
-    console.log('Filter parameters:', { search, status, category, brand, variantColour, variantCapacity });
+    // Validate search input
+    let searchTrimmed = typeof search === 'string' ? search.trim() : '';
+    if (searchTrimmed && (!/^[\w\s.,'"!?-]{0,100}$/.test(searchTrimmed))) {
+      return res.status(400).json({ message: 'Invalid search input.' });
+    }
     
-    const query = { isDeleted: false };
+    console.log('Filter parameters:', { search, status, category, brand, variantColour, variantCapacity, minPrice, maxPrice, sort });
     
-    if (search) query.name = { $regex: search, $options: 'i' };
+    const query = { isDeleted: false, status: { $in: ['active', 'inactive'] } };
+    
+    if (searchTrimmed) {
+      query.$or = [
+        { name: { $regex: searchTrimmed, $options: 'i' } },
+        { description: { $regex: searchTrimmed, $options: 'i' } },
+        { brand: { $regex: searchTrimmed, $options: 'i' } }
+      ];
+    }
     if (status) query.status = status;
     if (category && category !== '') {
-      // Convert category to ObjectId if it's a valid ObjectId string
-      if (mongoose.Types.ObjectId.isValid(category)) {
-        query.category = new mongoose.Types.ObjectId(category);
-      } else {
-        query.category = category;
+      console.log('Processing category filter:', category);
+      if (Array.isArray(category)) {
+        // Multiple categories selected - use $in operator
+        const categoryIds = category.map(cat => {
+          if (mongoose.Types.ObjectId.isValid(cat)) {
+            return new mongoose.Types.ObjectId(cat);
+          }
+          return cat;
+        });
+        console.log('Multiple categories - converted to ObjectIds:', categoryIds);
+        query.category = { $in: categoryIds };
+      } else if (typeof category === 'string') {
+        // Single category - check if it's comma-separated
+        if (category.includes(',')) {
+          const categoryIds = category.split(',').map(cat => {
+            if (mongoose.Types.ObjectId.isValid(cat.trim())) {
+              return new mongoose.Types.ObjectId(cat.trim());
+            }
+            return cat.trim();
+          });
+          console.log('Comma-separated categories - converted to ObjectIds:', categoryIds);
+          query.category = { $in: categoryIds };
+        } else {
+          // Single category value
+          if (mongoose.Types.ObjectId.isValid(category)) {
+            console.log('Single category - converted to ObjectId:', category);
+            query.category = new mongoose.Types.ObjectId(category);
+          } else {
+            console.log('Single category - using as string:', category);
+            query.category = category;
+          }
+        }
       }
     }
-    if (brand) query.brand = { $regex: brand, $options: 'i' };
+    // Handle brand filtering - support multiple brands
+    if (brand && brand !== '') {
+      console.log('Processing brand filter:', brand);
+      if (Array.isArray(brand)) {
+        // Multiple brands selected - use $in operator
+        const brandRegexes = brand.map(b => new RegExp(b, 'i'));
+        console.log('Multiple brands - converted to regexes:', brandRegexes);
+        query.brand = { $in: brandRegexes };
+      } else if (typeof brand === 'string') {
+        // Single brand - check if it's comma-separated
+        if (brand.includes(',')) {
+          const brandRegexes = brand.split(',').map(b => new RegExp(b.trim(), 'i'));
+          console.log('Comma-separated brands - converted to regexes:', brandRegexes);
+          query.brand = { $in: brandRegexes };
+        } else {
+          // Single brand value
+          console.log('Single brand - using regex:', brand);
+          query.brand = { $regex: brand, $options: 'i' };
+        }
+      }
+    }
     
     console.log('Base query:', query);
     
@@ -429,28 +485,120 @@ export const listProducts = async (req, res) => {
         $project: {
           categoryDetails: 0
         }
+      },
+      {
+        $addFields: {
+          variantDetails: { $filter: { input: "$variantDetails", as: "v", cond: { $eq: ["$$v.isDeleted", false] } } }
+        }
       }
     ];
 
     console.log('Pipeline before filtering:', JSON.stringify(pipeline, null, 2));
 
+    // Handle variantColour - Express might send it as a string or array
+    let colours = [];
+    if (variantColour && variantColour !== '') {
+      if (Array.isArray(variantColour)) {
+        colours = variantColour;
+      } else if (typeof variantColour === 'string') {
+        // Check if it's a comma-separated string or single value
+        colours = variantColour.includes(',') ? variantColour.split(',') : [variantColour];
+      }
+    }
+    
+    // Handle variantCapacity - Express might send it as a string or array
+    let capacities = [];
+    if (variantCapacity && variantCapacity !== '') {
+      if (Array.isArray(variantCapacity)) {
+        capacities = variantCapacity;
+      } else if (typeof variantCapacity === 'string') {
+        // Check if it's a comma-separated string or single value
+        capacities = variantCapacity.includes(',') ? variantCapacity.split(',') : [variantCapacity];
+      }
+    }
+
     // Add variant filtering if specified
-    if ((variantColour && variantColour !== '') || (variantCapacity && variantCapacity !== '')) {
-      const andArr = [];
-      if (variantColour && variantColour !== '') {
-        andArr.push({ 'variantDetails.colour': { $regex: variantColour, $options: 'i' } });
+    if (colours.length > 0 || capacities.length > 0) {
+      const variantFilters = [];
+      
+      if (colours.length > 0) {
+        console.log('Processing colours:', colours);
+        variantFilters.push({
+          'variantDetails': {
+            $elemMatch: {
+              'colour': { $in: colours.map(c => new RegExp(c.trim(), 'i')) }
+            }
+          }
+        });
       }
-      if (variantCapacity && variantCapacity !== '') {
-        andArr.push({ 'variantDetails.capacity': { $regex: variantCapacity, $options: 'i' } });
+      
+      if (capacities.length > 0) {
+        console.log('Processing capacities:', capacities);
+        variantFilters.push({
+          'variantDetails': {
+            $elemMatch: {
+              'capacity': { $in: capacities.map(c => new RegExp(c.trim(), 'i')) }
+            }
+          }
+        });
       }
-      if (andArr.length) {
-        pipeline.push({ $match: { $and: andArr } });
+      
+      if (variantFilters.length > 0) {
+        console.log('Adding variant filters to pipeline:', variantFilters);
+        pipeline.push({ $match: { $and: variantFilters } });
+      }
+    }
+
+    // Add price range filtering if specified
+    if (minPrice || maxPrice) {
+      const priceMatch = {};
+      if (minPrice) {
+        priceMatch['$gte'] = Number(minPrice);
+      }
+      if (maxPrice) {
+        priceMatch['$lte'] = Number(maxPrice);
+      }
+      if (Object.keys(priceMatch).length > 0) {
+        pipeline.push({
+          $match: {
+            'variantDetails': {
+              $elemMatch: {
+                price: priceMatch
+              }
+            }
+          }
+        });
+      }
+    }
+
+    // Add sorting
+    let sortStage = { createdAt: -1 }; // default sort
+    if (sort === 'name-asc' || sort === 'name-desc') {
+      pipeline.unshift({
+        $addFields: {
+          nameLower: { $toLower: "$name" }
+        }
+      });
+      sortStage = { nameLower: sort === 'name-asc' ? 1 : -1 };
+    } else {
+      switch (sort) {
+        case 'oldest':
+          sortStage = { createdAt: 1 };
+          break;
+        case 'price-asc':
+          sortStage = { 'variantDetails.price': 1 };
+          break;
+        case 'price-desc':
+          sortStage = { 'variantDetails.price': -1 };
+          break;
+        default:
+          sortStage = { createdAt: -1 }; // newest first
       }
     }
 
     // Add sorting and pagination
     pipeline.push(
-      { $sort: { createdAt: -1 } },
+      { $sort: sortStage },
       { $skip: (page - 1) * limit },
       { $limit: Number(limit) }
     );
@@ -487,23 +635,32 @@ export const listProducts = async (req, res) => {
       }
     ];
 
-    // Add variant filtering to count pipeline
-    if (variantColour && variantColour !== '' || variantCapacity && variantCapacity !== '') {
-      const variantMatch = {};
-      if (variantColour && variantColour !== '') {
-        variantMatch['variantDetails.colour'] = { $regex: variantColour, $options: 'i' };
-      }
-      if (variantCapacity && variantCapacity !== '') {
-        variantMatch['variantDetails.capacity'] = { $regex: variantCapacity, $options: 'i' };
-      }
-      
-      countPipeline.push({
-        $match: {
-          'variantDetails': {
-            $elemMatch: variantMatch
+    // Apply the same variant filtering logic to count pipeline
+    const countVariantFilters = [];
+    
+    if (colours.length > 0) {
+      countVariantFilters.push({
+        'variantDetails': {
+          $elemMatch: {
+            'colour': { $in: colours.map(c => new RegExp(c.trim(), 'i')) }
           }
         }
       });
+    }
+    
+    if (capacities.length > 0) {
+      countVariantFilters.push({
+        'variantDetails': {
+          $elemMatch: {
+            'capacity': { $in: capacities.map(c => new RegExp(c.trim(), 'i')) }
+          }
+        }
+      });
+    }
+    
+    if (countVariantFilters.length > 0) {
+      console.log('Adding variant filters to count pipeline:', countVariantFilters);
+      countPipeline.push({ $match: { $and: countVariantFilters } });
     }
 
     countPipeline.push({ $count: 'total' });
@@ -532,7 +689,7 @@ export const listProducts = async (req, res) => {
   }
 };
 
-// Get product by ID
+// Get product by ID      
 export const getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
@@ -676,8 +833,8 @@ export const editProduct = async (req, res) => {
             let buffer;
             try {
               buffer = await sharp(file.path)
-                .resize(600, 600, { fit: 'cover' })
-                .toBuffer();
+              .resize(600, 600, { fit: 'cover' })
+              .toBuffer();
             } catch (sharpError) {
               console.error('Sharp error:', sharpError);
               throw new Error(`Failed to process image ${file.originalname}: ${sharpError.message}`);
@@ -691,12 +848,12 @@ export const editProduct = async (req, res) => {
             let result;
             try {
               result = await cloudinary.uploader.upload(tempPath, { folder: 'product-variants' });
-              variantImageUrls.push(result.secure_url);
+            variantImageUrls.push(result.secure_url);
               console.log(`Uploaded variant ${i + 1} image to Cloudinary:`, result.secure_url);
             } catch (cloudinaryError) {
               console.error('Cloudinary upload error:', cloudinaryError);
               throw new Error(`Failed to upload image ${file.originalname} to Cloudinary: ${cloudinaryError.message}`);
-            }
+          }
           }
         } catch (processingError) {
           console.error('Variant image processing error:', processingError);
@@ -747,16 +904,7 @@ export const editProduct = async (req, res) => {
       product.variants = variantIds;
       product.totalStock = totalStock;
       
-      // Auto-update product status based on stock (only if not manually set to inactive)
-      if (product.status !== 'inactive') {
-        if (totalStock === 0) {
-          product.status = 'inactive';
-        } else if (totalStock < 10) {
-          product.status = 'active';
-        } else {
-          product.status = 'active';
-        }
-      }
+      // Do not override product.status here; allow admin to set status explicitly
       
       await product.save();
     }
@@ -825,19 +973,26 @@ export const deleteVariant = async (req, res) => {
     }
     
     // Check if variant exists and belongs to the product
-    const variant = await ProductVariant.findOne({ _id: variantId, product: productId });
+    const variant = await ProductVariant.findOne({ _id: variantId, product: productId, isDeleted: false });
     if (!variant) {
       return res.status(404).json({ message: 'Variant not found' });
     }
-    
-    // Delete the variant
-    await ProductVariant.findByIdAndDelete(variantId);
+
+    // Check if this is the last variant for the product (count only non-deleted)
+    const variantCount = await ProductVariant.countDocuments({ product: productId, isDeleted: false });
+    if (variantCount <= 1) {
+      return res.status(400).json({ message: 'A product must have at least one variant. Cannot delete the last variant.' });
+    }
+
+    // Soft delete the variant
+    variant.isDeleted = true;
+    await variant.save();
     
     // Remove variant from product's variants array
     product.variants = product.variants.filter(v => v.toString() !== variantId);
     
-    // Recalculate total stock
-    const remainingVariants = await ProductVariant.find({ product: productId });
+    // Recalculate total stock (only non-deleted variants)
+    const remainingVariants = await ProductVariant.find({ product: productId, isDeleted: false });
     const totalStock = remainingVariants.reduce((sum, v) => sum + v.stock, 0);
     product.totalStock = totalStock;
     
@@ -854,7 +1009,7 @@ export const deleteVariant = async (req, res) => {
     
     await product.save();
     
-    res.json({ message: 'Variant deleted successfully' });
+    res.json({ message: 'Variant deleted successfully (soft delete)' });
   } catch (error) {
     console.error('Delete variant error:', error);
     res.status(500).json({ message: error.message });
@@ -884,39 +1039,13 @@ export const updateVariant = async (req, res) => {
     if (capacity) variant.capacity = capacity;
     if (price !== undefined) variant.price = price;
     if (stock !== undefined) variant.stock = stock;
-    
-    // Handle status update - if product is inactive, variant must remain inactive
+    // Allow changing variant status regardless of product status
     if (status) {
-      if (product.status === 'inactive') {
-        // If product is inactive, force variant to be inactive
-        variant.status = 'inactive';
-        console.log('Product is inactive, forcing variant to inactive status');
-      } else {
-        // If product is active, allow variant status to be updated
-        variant.status = status;
-        console.log('Product is active, allowing variant status update to:', status);
-      }
+      variant.status = status;
+      console.log('Variant status updated to:', status);
     }
     
     await variant.save();
-    
-    // Recalculate total stock for the product
-    const allVariants = await ProductVariant.find({ product: productId });
-    const totalStock = allVariants.reduce((sum, v) => sum + v.stock, 0);
-    product.totalStock = totalStock;
-    
-    // Update product status based on total stock (only if not manually set to inactive)
-    if (product.status !== 'inactive') {
-      if (totalStock === 0) {
-        product.status = 'inactive';
-      } else if (totalStock < 10) {
-        product.status = 'active';
-      } else {
-        product.status = 'active';
-      }
-    }
-    
-    await product.save();
     
     res.json({ message: 'Variant updated successfully', variant });
   } catch (error) {
@@ -986,8 +1115,8 @@ export const addVariant = async (req, res) => {
         let buffer;
         try {
           buffer = await sharp(file.path)
-            .resize(600, 600, { fit: 'cover' })
-            .toBuffer();
+          .resize(600, 600, { fit: 'cover' })
+          .toBuffer();
         } catch (sharpError) {
           console.error('Sharp error:', sharpError);
           throw new Error(`Failed to process image ${file.originalname}: ${sharpError.message}`);
@@ -1001,12 +1130,12 @@ export const addVariant = async (req, res) => {
         let result;
         try {
           result = await cloudinary.uploader.upload(tempPath, { folder: 'product-variants' });
-          variantImageUrls.push(result.secure_url);
+        variantImageUrls.push(result.secure_url);
           console.log(`Uploaded variant image ${i + 1} to Cloudinary:`, result.secure_url);
         } catch (cloudinaryError) {
           console.error('Cloudinary upload error:', cloudinaryError);
           throw new Error(`Failed to upload image ${file.originalname} to Cloudinary: ${cloudinaryError.message}`);
-        }
+      }
       }
     } catch (processingError) {
       console.error('Image processing error:', processingError);
@@ -1061,24 +1190,17 @@ export const addVariant = async (req, res) => {
     await variant.save();
     
     // Update product with new variant
-    product.variants.push(variant._id);
-    product.totalStock += numericStock;
-    
-    // Auto-update product status based on total stock (only if not manually set to inactive)
-    if (product.status !== 'inactive') {
-      if (product.totalStock === 0) {
-        product.status = 'inactive';
-      } else if (product.totalStock < 10) {
-        product.status = 'active';
-      } else {
-        product.status = 'active';
+    // Always fetch the latest product document before updating
+    const updatedProduct = await Product.findById(productId);
+    if (updatedProduct) {
+      // Only add the variant _id if not already present
+      if (!updatedProduct.variants.some(id => id.toString() === variant._id.toString())) {
+        updatedProduct.variants.push(variant._id);
       }
+      updatedProduct.totalStock += numericStock;
+      await updatedProduct.save();
     }
     
-    console.log('Updating product:', product._id);
-    await product.save();
-    
-    console.log('Variant added successfully');
     res.status(201).json({ 
       message: 'Variant added successfully', 
       variant,
@@ -1105,5 +1227,507 @@ export const addVariant = async (req, res) => {
       message: 'Internal Server Error', 
       error: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
     });
+  }
+};
+
+// Get unique variant attributes for user-facing filtering (public)
+export const getPublicVariantOptions = async (req, res) => {
+  try {
+    const [colours, capacities] = await Promise.all([
+      ProductVariant.distinct('colour', { status: 'active' }),
+      ProductVariant.distinct('capacity', { status: 'active' })
+    ]);
+    
+    res.json({
+      colours: colours.filter(Boolean).sort(),
+      capacities: capacities.filter(Boolean).sort()
+    });
+  } catch (error) {
+    console.error('Get public variant options error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get unique brands for user-facing filtering (public)
+export const getPublicBrandOptions = async (req, res) => {
+  try {
+    const brands = await Product.distinct('brand', { isDeleted: false, status: 'active' });
+    res.json({
+      brands: brands.filter(Boolean).sort()
+    });
+  } catch (error) {
+    console.error('Get public brand options error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get public products for user-facing product listing  variant.stock
+export const getPublicProducts = async (req, res) => {
+  try {
+    const { page = 1, limit = 6, search = '', category, brand, variantColour, variantCapacity, minPrice, maxPrice, sort = 'newest' } = req.query;
+    
+    // Validate search input
+    let searchTrimmed = typeof search === 'string' ? search.trim() : '';
+    if (searchTrimmed && (!/^[\w\s.,'"!?-]{0,100}$/.test(searchTrimmed))) {
+      return res.status(400).json({ message: 'Invalid search input.' });
+    }
+    
+    // Debug: Log raw query parameters
+    console.log('Raw query parameters:', req.query);
+    console.log('variantColour type:', typeof variantColour, 'value:', variantColour);
+    console.log('variantCapacity type:', typeof variantCapacity, 'value:', variantCapacity);
+    console.log('category type:', typeof category, 'value:', category);
+    
+    console.log('Public products filter parameters:', { search, category, brand, variantColour, variantCapacity, minPrice, maxPrice, sort });
+    
+    const query = { isDeleted: false, status: { $in: ['active', 'inactive'] } };
+    
+    if (searchTrimmed) {
+      query.$or = [
+        { name: { $regex: searchTrimmed, $options: 'i' } },
+        { description: { $regex: searchTrimmed, $options: 'i' } },
+        { brand: { $regex: searchTrimmed, $options: 'i' } }
+      ];
+    }
+    // Handle category filtering - support multiple categories
+    if (category && category !== '') {
+      console.log('Processing category filter:', category);
+      if (Array.isArray(category)) {
+        // Multiple categories selected - use $in operator
+        const categoryIds = category.map(cat => {
+          if (mongoose.Types.ObjectId.isValid(cat)) {
+            return new mongoose.Types.ObjectId(cat);
+          }
+          return cat;
+        });
+        console.log('Multiple categories - converted to ObjectIds:', categoryIds);
+        query.category = { $in: categoryIds };
+      } else if (typeof category === 'string') {
+        // Single category - check if it's comma-separated
+        if (category.includes(',')) {
+          const categoryIds = category.split(',').map(cat => {
+            if (mongoose.Types.ObjectId.isValid(cat.trim())) {
+              return new mongoose.Types.ObjectId(cat.trim());
+            }
+            return cat.trim();
+          });
+          console.log('Comma-separated categories - converted to ObjectIds:', categoryIds);
+          query.category = { $in: categoryIds };
+        } else {
+          // Single category value
+          if (mongoose.Types.ObjectId.isValid(category)) {
+            console.log('Single category - converted to ObjectId:', category);
+            query.category = new mongoose.Types.ObjectId(category);
+          } else {
+            console.log('Single category - using as string:', category);
+            query.category = category;
+          }
+        }
+      }
+    }
+    // Handle brand filtering - support multiple brands
+    if (brand && brand !== '') {
+      console.log('Processing brand filter:', brand);
+      if (Array.isArray(brand)) {
+        // Multiple brands selected - use $in operator
+        const brandRegexes = brand.map(b => new RegExp(b, 'i'));
+        console.log('Multiple brands - converted to regexes:', brandRegexes);
+        query.brand = { $in: brandRegexes };
+      } else if (typeof brand === 'string') {
+        // Single brand - check if it's comma-separated
+        if (brand.includes(',')) {
+          const brandRegexes = brand.split(',').map(b => new RegExp(b.trim(), 'i'));
+          console.log('Comma-separated brands - converted to regexes:', brandRegexes);
+          query.brand = { $in: brandRegexes };
+        } else {
+          // Single brand value
+          console.log('Single brand - using regex:', brand);
+          query.brand = { $regex: brand, $options: 'i' };
+        }
+      }
+    }
+    
+    console.log('Public products base query:', query);
+    
+    // Build aggregation pipeline
+    let pipeline = [
+      { $match: query },
+      {
+        $addFields: {
+          variants: {
+            $map: {
+              input: "$variants",
+              as: "variantId",
+              in: {
+                $cond: [
+                  { $eq: [ { $type: "$$variantId" }, "objectId" ] },
+                  "$$variantId",
+                  { $toObjectId: "$$variantId" }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: 'productvariants',
+          localField: 'variants',
+          foreignField: '_id',
+          as: 'variantDetails'
+        }
+      },
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'category',
+          foreignField: '_id',
+          as: 'categoryDetails'
+        }
+      },
+      {
+        $addFields: {
+          category: { $arrayElemAt: ['$categoryDetails', 0] }
+        }
+      },
+      {
+        $project: {
+          categoryDetails: 0
+        }
+      },
+      {
+        $addFields: {
+          variantDetails: { $filter: { input: "$variantDetails", as: "v", cond: { $eq: ["$$v.isDeleted", false] } } }
+        }
+      }
+    ];
+
+    // Handle multiple variant filters
+    const variantFilters = [];
+    
+    // Handle variantColour - Express might send it as a string or array
+    let colours = [];
+    if (variantColour && variantColour !== '') {
+      if (Array.isArray(variantColour)) {
+        colours = variantColour;
+      } else if (typeof variantColour === 'string') {
+        // Check if it's a comma-separated string or single value
+        colours = variantColour.includes(',') ? variantColour.split(',') : [variantColour];
+      }
+    }
+    
+    if (colours.length > 0) {
+      console.log('Processing colours:', colours);
+      variantFilters.push({
+        'variantDetails': {
+          $elemMatch: {
+            'colour': { $in: colours.map(c => new RegExp(c.trim(), 'i')) }
+          }
+        }
+      });
+    }
+    
+    // Handle variantCapacity - Express might send it as a string or array
+    let capacities = [];
+    if (variantCapacity && variantCapacity !== '') {
+      if (Array.isArray(variantCapacity)) {
+        capacities = variantCapacity;
+      } else if (typeof variantCapacity === 'string') {
+        // Check if it's a comma-separated string or single value
+        capacities = variantCapacity.includes(',') ? variantCapacity.split(',') : [variantCapacity];
+      }
+    }
+    
+    if (capacities.length > 0) {
+      console.log('Processing capacities:', capacities);
+      variantFilters.push({
+        'variantDetails': {
+          $elemMatch: {
+            'capacity': { $in: capacities.map(c => new RegExp(c.trim(), 'i')) }
+          }
+        }
+      });
+    }
+    
+    // Add variant filters to pipeline
+    if (variantFilters.length > 0) {
+      console.log('Adding variant filters to pipeline:', variantFilters);
+      pipeline.push({ $match: { $and: variantFilters } });
+    }
+
+    // Add price range filtering if specified
+    if (minPrice || maxPrice) {
+      const priceMatch = {};
+      if (minPrice) {
+        priceMatch['$gte'] = Number(minPrice);
+      }
+      if (maxPrice) {
+        priceMatch['$lte'] = Number(maxPrice);
+      }
+      if (Object.keys(priceMatch).length > 0) {
+        pipeline.push({
+          $match: {
+            'variantDetails': {
+              $elemMatch: {
+                price: priceMatch
+              }
+            }
+          }
+        });
+      }
+    }
+
+    // Add sorting
+    let sortStage = { createdAt: -1 }; // default sort
+    if (sort === 'name-asc' || sort === 'name-desc') {
+      pipeline.unshift({
+        $addFields: {
+          nameLower: { $toLower: "$name" }
+        }
+      });
+      sortStage = { nameLower: sort === 'name-asc' ? 1 : -1 };
+    } else {
+      switch (sort) {
+        case 'oldest':
+          sortStage = { createdAt: 1 };
+          break;
+        case 'price-asc':
+          sortStage = { 'variantDetails.price': 1 };
+          break;
+        case 'price-desc':
+          sortStage = { 'variantDetails.price': -1 };
+          break;
+        default:
+          sortStage = { createdAt: -1 }; // newest first
+      }
+    }
+
+    // Add sorting and pagination
+    pipeline.push(
+      { $sort: sortStage },
+      { $skip: (page - 1) * limit },
+      { $limit: Number(limit) }
+    );
+
+    // Get total count for pagination
+    const countPipeline = [
+      { $match: query },
+      {
+        $addFields: {
+          variants: {
+            $map: {
+              input: "$variants",
+              as: "variantId",
+              in: {
+                $cond: [
+                  { $eq: [ { $type: "$$variantId" }, "objectId" ] },
+                  "$$variantId",
+                  { $toObjectId: "$$variantId" }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: 'productvariants',
+          localField: 'variants',
+          foreignField: '_id',
+          as: 'variantDetails'
+        }
+      }
+    ];
+
+    // Apply the same variant filtering logic to count pipeline
+    const countVariantFilters = [];
+    
+    if (colours.length > 0) {
+      countVariantFilters.push({
+        'variantDetails': {
+          $elemMatch: {
+            'colour': { $in: colours.map(c => new RegExp(c.trim(), 'i')) }
+          }
+        }
+      });
+    }
+    
+    if (capacities.length > 0) {
+      countVariantFilters.push({
+        'variantDetails': {
+          $elemMatch: {
+            'capacity': { $in: capacities.map(c => new RegExp(c.trim(), 'i')) }
+          }
+        }
+      });
+    }
+    
+    if (countVariantFilters.length > 0) {
+      console.log('Adding variant filters to count pipeline:', countVariantFilters);
+      countPipeline.push({ $match: { $and: countVariantFilters } });
+    }
+
+    countPipeline.push({ $count: 'total' });
+
+    const [products, totalResult] = await Promise.all([
+      Product.aggregate(pipeline),
+      Product.aggregate(countPipeline)
+    ]);
+
+    console.log('Public products found:', products.length);
+    console.log('Public products total result:', totalResult);
+    console.log('Product IDs being returned:', products.map(p => p._id));
+
+    const total = totalResult.length > 0 ? totalResult[0].total : 0;
+
+    res.json({ products, total });
+  } catch (error) {
+    console.error('Public products error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get public product by ID (for user-facing product details)
+export const getPublicProductById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log('getPublicProductById called with ID:', id);
+    
+    // Validate product ID format
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.log('Invalid product ID format:', id);
+      return res.status(400).json({ message: 'Invalid product ID format' });
+    }
+
+    console.log('Looking for product with ID:', id);
+    
+    // Use aggregation pipeline to populate variantDetails like ProductListing
+    const pipeline = [
+      { $match: { _id: new mongoose.Types.ObjectId(id) } },
+      {
+        $addFields: {
+          variants: {
+            $map: {
+              input: "$variants",
+              as: "variantId",
+              in: {
+                $cond: [
+                  { $eq: [ { $type: "$$variantId" }, "objectId" ] },
+                  "$$variantId",
+                  { $toObjectId: "$$variantId" }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: 'productvariants',
+          localField: 'variants',
+          foreignField: '_id',
+          as: 'variantDetails'
+        }
+      },
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'category',
+          foreignField: '_id',
+          as: 'categoryDetails'
+        }
+      },
+      {
+        $addFields: {
+          category: { $arrayElemAt: ['$categoryDetails', 0] }
+        }
+      },
+      {
+        $project: {
+          categoryDetails: 0
+        }
+      },
+      {
+        $addFields: {
+          variantDetails: { $filter: { input: "$variantDetails", as: "v", cond: { $eq: ["$$v.isDeleted", false] } } }
+        }
+      }
+    ];
+
+    const products = await Product.aggregate(pipeline);
+    const product = products[0];
+
+    console.log('Product found:', product ? 'Yes' : 'No');
+    if (product) {
+      console.log('Product details:', {
+        _id: product._id,
+        name: product.name,
+        status: product.status,
+        isDeleted: product.isDeleted,
+        variantDetailsLength: product.variantDetails?.length
+      });
+    }
+
+    if (!product) {
+      console.log('Product not found in database');
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    // Check if product is deleted, blocked, or unavailable
+    if (product.isDeleted || product.status !== 'active') {
+      console.log('Product is not available:', { isDeleted: product.isDeleted, status: product.status });
+      return res.status(404).json({ message: 'Product not available' });
+    }
+
+    // Calculate total stock from active variants
+    const totalStock = product.variantDetails.reduce((sum, variant) => sum + (variant.stock || 0), 0);
+
+    // Prepare product data for frontend
+    const productData = {
+      _id: product._id,
+      name: product.name,
+      description: product.description,
+      brand: product.brand,
+      category: product.category,
+      status: product.status,
+      totalStock,
+      mainImage: product.mainImage,
+      otherImages: product.otherImages || [],
+      variantDetails: product.variantDetails, // Use variantDetails instead of variants
+      createdAt: product.createdAt,
+      // Add mock data for features not yet implemented
+      rating: 4.5, // Mock rating
+      reviews: 128, // Mock review count
+      price: product.variantDetails.length > 0 ? Math.min(...product.variantDetails.map(v => v.price)) : 0,
+      discount: 0, // Mock discount
+      coupons: [], // Mock coupons
+      specs: [
+        { key: 'Brand', value: product.brand },
+        { key: 'Category', value: product.category?.name || 'N/A' },
+        { key: 'Available Variants', value: product.variantDetails.length },
+        { key: 'Total Stock', value: totalStock }
+      ],
+      isNew: new Date(product.createdAt) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // New if created within 30 days
+      blocked: false,
+      unavailable: false
+    };
+
+    console.log('Sending product data to frontend');
+    console.log('Product variantDetails being sent:', {
+      variantDetailsLength: product.variantDetails?.length,
+      variantDetails: product.variantDetails?.map(v => ({
+        _id: v._id,
+        colour: v.colour,
+        capacity: v.capacity,
+        price: v.price,
+        stock: v.stock,
+        status: v.status
+      }))
+    });
+    res.json(productData);
+  } catch (error) {
+    console.error('Error getting public product by ID:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 }; 

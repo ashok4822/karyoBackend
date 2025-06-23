@@ -19,11 +19,36 @@ const PORT = 5000;
 // app.use(cors());
 app.use(
   cors({
-    origin: "http://localhost:8080", // your frontend URL
+    origin: function (origin, callback) {
+      console.log('CORS request from origin:', origin);
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      const allowedOrigins = [
+        'http://localhost:8080',
+        'http://localhost:8081', 
+        'http://localhost:8082',
+        'http://localhost:8083',
+        'http://localhost:8084',
+        'http://127.0.0.1:8080',
+        'http://127.0.0.1:8081',
+        'http://127.0.0.1:8082',
+        'http://127.0.0.1:8083',
+        'http://127.0.0.1:8084'
+      ];
+      
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        console.log('CORS blocked origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true, // allow cookies and credentials
   })
 );
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // Passport session setup
@@ -47,33 +72,14 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 
 // User routes
-app.use("/users", verifyToken, userRoutes);
+app.use("/users", userRoutes);
 
 //Public routes
 app.use("/", publicRoutes);
 
-// Mock dashboard data
-const dashboardData = {
-  totalSales: 12345,
-  totalOrders: 120,
-  totalProducts: 58,
-  totalCustomers: 34,
-  salesGrowth: 12,
-  orderGrowth: 8,
-  recentOrders: [
-    { id: 1, customer: "John Doe", amount: 250, status: "completed" },
-    { id: 2, customer: "Jane Smith", amount: 120, status: "pending" },
-    { id: 3, customer: "Alice Brown", amount: 90, status: "cancelled" },
-  ],
-  lowStockProducts: [
-    { id: 1, name: "Product A", stock: 3, maxStock: 50 },
-    { id: 2, name: "Product B", stock: 7, maxStock: 40 },
-  ],
-};
 
-app.get("/dashboard", (req, res) => {
-  res.json(dashboardData);
-});
+
+
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

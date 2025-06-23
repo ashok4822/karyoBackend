@@ -87,6 +87,10 @@ export const loginUser = async function (req, res) {
       return res.status(400).json({ message: `User not found` });
     }
 
+    if (user.role === 'admin') {
+      return res.status(403).json({ message: 'Admins must log in through the admin login page.' });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
