@@ -3,6 +3,10 @@ import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import cloudinary from "../config/cloudinary.js";
 import ShippingAddress from "../models/shippingAddressModel.js";
+import { body, validationResult } from "express-validator";
+import Otp from "../models/otpModel.js";
+import { transporter } from "../config/mail.js";
+import { OTP_EXPIRY_SECONDS } from "../config/constants.js";
 dotenv.config();
 
 export const logout = async function (req, res) {
@@ -228,3 +232,67 @@ export const setDefaultShippingAddress = async (req, res) => {
     res.status(500).json({ message: `Internal Server Error: ${error.message}` });
   }
 };
+
+function generateOtp() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+export const requestEmailChangeOtp = [
+  body("email").isEmail().withMessage("Please provide a valid email address").normalizeEmail(),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array().map(e => e.msg).join(", ") });
+    }
+    const { email } = req.body;
+    const userId = req.user.userId;
+    // Check if email is already used by another user
+    const existingUser = await User.findOne({ email, _id: { $ne: userId } });
+    if (existingUser) {
+      return res.status(400).json({ message: "Email is already registered with another account" });
+    }
+    // Generate and save OTP
+    const otp = generateOtp();
+    await Otp.deleteMany({ email });
+    await Otp.create({ email, otp });
+    // Send OTP email
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Your Email Change OTP Code",
+      text: `Your OTP code is: ${otp}`,
+    });
+    res.json({ message: "OTP sent to email" });
+  }
+];
+
+export const verifyEmailChangeOtp = [
+  body("email").isEmail().withMessage("Please provide a valid email address").normalizeEmail(),
+  body("otp").isLength({ min: 6, max: 6 }).withMessage("OTP must be 6 digits"),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array().map(e => e.msg).join(", ") });
+    }
+    const { email, otp } = req.body;
+    const userId = req.user.userId;
+    // Find OTP
+    const otpDoc = await Otp.findOne({ email, otp });
+    if (!otpDoc) {
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+    if (Date.now() - new Date(otpDoc.createdAt).getTime() > OTP_EXPIRY_SECONDS * 1000) {
+      await Otp.deleteMany({ email });
+      return res.status(400).json({ message: "OTP expired. Please request a new one." });
+    }
+    // Update user's email
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    user.email = email;
+    await user.save();
+    await Otp.deleteMany({ email });
+    res.status(200).json({ message: "Email updated successfully", email });
+  }
+];

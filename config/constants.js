@@ -1,1 +1,1 @@
-export const OTP_EXPIRY_SECONDS = 100; // 2 minutes
+export const OTP_EXPIRY_SECONDS = 60; // 1 minute
