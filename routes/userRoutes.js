@@ -1,12 +1,26 @@
 import express from "express";
+import multer from "multer";
+import path from "path";
 // import { registerUser, loginUser } from "../controllers/userController.js";
-import { getProfile, updateProfile } from "../controllers/profileController.js";
+import { getProfile, updateProfile, uploadProfileImage } from "../controllers/profileController.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
+// Multer setup for local temp storage
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/");
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + path.extname(file.originalname));
+  },
+});
+const upload = multer({ storage });
+
 router.get("/profile", verifyToken, getProfile);
 router.put("/profile", verifyToken, updateProfile);
+router.put("/profile-image", verifyToken, upload.single("image"), uploadProfileImage);
 
 export default router;
 

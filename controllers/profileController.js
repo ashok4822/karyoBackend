@@ -1,6 +1,7 @@
 import User from "../models/userModel.js";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
+import cloudinary from "../config/cloudinary.js";
 dotenv.config();
 
 export const logout = async function (req, res) {
@@ -124,5 +125,36 @@ export const getProfile = async function (req, res) {
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
+export const uploadProfileImage = async function (req, res) {
+  try {
+    const userId = req.user.userId;
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+    // Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      folder: "user-profile-images",
+      width: 300,
+      height: 300,
+      crop: "fill",
+    });
+    // Update user profileImage
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $set: { profileImage: result.secure_url } },
+      { new: true }
+    );
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.status(200).json({
+      message: "Profile image updated successfully",
+      profileImage: user.profileImage,
+    });
+  } catch (error) {
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
   }
 };
