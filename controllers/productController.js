@@ -1044,6 +1044,69 @@ export const updateVariant = async (req, res) => {
       variant.status = status;
       console.log('Variant status updated to:', status);
     }
+
+    // Handle image update if new images are provided
+    const variantImages = req.files?.images || [];
+    if (variantImages.length > 0) {
+      const variantImageUrls = [];
+      const tempFiles = [];
+      try {
+        for (let i = 0; i < variantImages.length; i++) {
+          const file = variantImages[i];
+          // Validate file type
+          if (!file.mimetype.startsWith('image/')) {
+            throw new Error(`File ${file.originalname} is not an image`);
+          }
+          // Resize image
+          let buffer;
+          try {
+            buffer = await sharp(file.path)
+              .resize(600, 600, { fit: 'cover' })
+              .toBuffer();
+          } catch (sharpError) {
+            console.error('Sharp error:', sharpError);
+            throw new Error(`Failed to process image ${file.originalname}: ${sharpError.message}`);
+          }
+          const tempPath = file.path + '-resized.jpg';
+          fs.writeFileSync(tempPath, buffer);
+          tempFiles.push(tempPath);
+          // Upload to Cloudinary
+          let result;
+          try {
+            result = await cloudinary.uploader.upload(tempPath, { folder: 'product-variants' });
+            variantImageUrls.push(result.secure_url);
+          } catch (cloudinaryError) {
+            console.error('Cloudinary upload error:', cloudinaryError);
+            throw new Error(`Failed to upload image ${file.originalname} to Cloudinary: ${cloudinaryError.message}`);
+          }
+        }
+      } catch (processingError) {
+        console.error('Variant image processing error:', processingError);
+        return res.status(500).json({ message: processingError.message });
+      } finally {
+        // Clean up temporary files
+        for (const file of variantImages) {
+          try {
+            if (fs.existsSync(file.path)) {
+              fs.unlinkSync(file.path);
+            }
+          } catch (err) {
+            console.log('Error deleting original file:', err.message);
+          }
+        }
+        for (const tempFile of tempFiles) {
+          try {
+            if (fs.existsSync(tempFile)) {
+              fs.unlinkSync(tempFile);
+            }
+          } catch (err) {
+            console.log('Error deleting temp file:', err.message);
+          }
+        }
+      }
+      // Replace the imageUrls array
+      variant.imageUrls = variantImageUrls;
+    }
     
     await variant.save();
     

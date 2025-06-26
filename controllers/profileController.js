@@ -118,6 +118,7 @@ export const getProfile = async function (req, res) {
         profileImage: user.profileImage,
         role: user.role,
         createdAt: user.createdAt,
+        isDeleted: user.isDeleted,
       },
     });
   } catch (error) {

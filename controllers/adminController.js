@@ -62,6 +62,7 @@ export const adminLogin = async function (req, res) {
     const refreshToken = generateRefreshToken(user);
     await User.updateOne({ _id: user._id }, { $set: { refreshToken } });
     const isProduction = process.env.NODE_ENV === "production";
+    res.clearCookie("refreshToken", { path: "/" });
     res.cookie("adminRefreshToken", refreshToken, {
       httpOnly: true,
       secure: isProduction,
@@ -152,9 +153,3 @@ export const adminRefreshToken = async (req, res) => {
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
-
-
-
-
-
-

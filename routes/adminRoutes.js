@@ -167,6 +167,8 @@ router.delete(
 router.put(
   "/products/:productId/variants/:variantId",
   verifyAdmin,
+  uploadProduct,
+  handleMulterError,
   updateVariant
 );
 router.post("/refresh-token", adminRefreshToken);

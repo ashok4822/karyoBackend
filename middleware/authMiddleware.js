@@ -1,12 +1,21 @@
 import jwt from "jsonwebtoken";
 import User from "../models/userModel.js";
-import { verifyAccessToken, verifyRefreshToken, generateAccessToken, generateRefreshToken } from "../utils/jwt.js";
+import {
+  verifyAccessToken,
+  verifyRefreshToken,
+  generateAccessToken,
+  generateRefreshToken,
+} from "../utils/jwt.js";
 
 export const verifyToken = async function (req, res, next) {
   let accessToken = req.cookies["accessToken"];
   // Check Authorization header if not in cookie
-  if (!accessToken && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-    accessToken = req.headers.authorization.split(' ')[1];
+  if (
+    !accessToken &&
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer ")
+  ) {
+    accessToken = req.headers.authorization.split(" ")[1];
   }
 
   if (!accessToken) {
@@ -38,12 +47,6 @@ export const verifyToken = async function (req, res, next) {
           { _id: userId },
           { $set: { refreshToken } }
         );
-
-        res.cookie("accessToken", accessToken, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: `Strict`,
-        });
       } else {
         throw new Error(`verificaion failed`);
       }

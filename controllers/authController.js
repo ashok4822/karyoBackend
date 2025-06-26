@@ -57,15 +57,23 @@ export const registerUser = async function (req, res) {
     } else {
       const accessToken = generateAccessToken(savedUserData);
       const refreshToken = generateRefreshToken(savedUserData);
-      await User.updateOne({ _id: savedUserData._id }, { $set: { refreshToken } });
+      await User.updateOne(
+        { _id: savedUserData._id },
+        { $set: { refreshToken } }
+      );
       const isProduction = process.env.NODE_ENV === "production";
       res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         secure: isProduction,
         sameSite: isProduction ? "Strict" : "Lax",
-        path: '/',
+        path: "/",
       });
-      res.status(201).json({ user: { id: savedUserData.id, role: savedUserData.role }, token: accessToken });
+      res
+        .status(201)
+        .json({
+          user: { id: savedUserData.id, role: savedUserData.role },
+          token: accessToken,
+        });
     }
   } catch (error) {
     res
@@ -87,8 +95,19 @@ export const loginUser = async function (req, res) {
       return res.status(400).json({ message: `User not found` });
     }
 
-    if (user.role === 'admin') {
-      return res.status(403).json({ message: 'Admins must log in through the admin login page.' });
+    if (user.isDeleted) {
+      return res
+        .status(403)
+        .json({
+          message:
+            "Your account has been blocked by the admin. Please contact support.",
+        });
+    }
+
+    if (user.role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "Admins must log in through the admin login page." });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -107,10 +126,12 @@ export const loginUser = async function (req, res) {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "Strict" : "Lax",
-      path: '/',
+      path: "/",
     });
 
-    res.status(201).json({ user: { id: user.id, role: user.role }, token: accessToken });
+    res
+      .status(201)
+      .json({ user: { id: user.id, role: user.role }, token: accessToken });
   } catch (error) {
     res
       .status(500)
@@ -121,11 +142,14 @@ export const loginUser = async function (req, res) {
 export const requestOtp = async (req, res) => {
   const { email, username } = req.body;
   if (!email) return res.status(400).json({ message: "Email is required" });
-  if (!username) return res.status(400).json({ message: "Username is required" });
+  if (!username)
+    return res.status(400).json({ message: "Username is required" });
   const userByEmail = await User.findOne({ email });
-  if (userByEmail) return res.status(400).json({ message: "User already exists" });
+  if (userByEmail)
+    return res.status(400).json({ message: "User already exists" });
   const userByUsername = await User.findOne({ username });
-  if (userByUsername) return res.status(400).json({ message: "Username already exists" });
+  if (userByUsername)
+    return res.status(400).json({ message: "Username already exists" });
   const otp = generateOtp();
   await Otp.deleteMany({ email });
   await Otp.create({ email, otp });
@@ -143,17 +167,23 @@ export const verifyOtp = async (req, res) => {
   if (!email || !otp || !username || !password)
     return res.status(400).json({ message: "All fields required" });
   const otpDoc = await Otp.findOne({ email, otp });
-  if (!otpDoc) return res.status(400).json({ message: "Invalid or expired OTP" });
-  if (Date.now() - new Date(otpDoc.createdAt).getTime() > OTP_EXPIRY_SECONDS * 1000) {
+  if (!otpDoc)
+    return res.status(400).json({ message: "Invalid or expired OTP" });
+  if (
+    Date.now() - new Date(otpDoc.createdAt).getTime() >
+    OTP_EXPIRY_SECONDS * 1000
+  ) {
     await Otp.deleteMany({ email });
-    return res.status(400).json({ message: "OTP expired. Please request a new one." });
+    return res
+      .status(400)
+      .json({ message: "OTP expired. Please request a new one." });
   }
   const hashedPassword = await bcrypt.hash(password, 10);
-  const user = new User({ 
-    email, 
-    username, 
+  const user = new User({
+    email,
+    username,
     password: hashedPassword,
-    mobileNo: undefined
+    mobileNo: undefined,
   });
   await user.save();
   await Otp.deleteMany({ email });
@@ -165,9 +195,11 @@ export const verifyOtp = async (req, res) => {
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? "Strict" : "Lax",
-    path: '/',
+    path: "/",
   });
-  res.status(201).json({ user: { id: user.id, role: user.role }, token: accessToken });
+  res
+    .status(201)
+    .json({ user: { id: user.id, role: user.role }, token: accessToken });
 };
 
 export const requestPasswordResetOtp = async (req, res) => {
@@ -189,24 +221,38 @@ export const requestPasswordResetOtp = async (req, res) => {
 
 export const verifyPasswordResetOtp = async (req, res) => {
   const { email, otp } = req.body;
-  if (!email || !otp) return res.status(400).json({ message: "All fields required" });
+  if (!email || !otp)
+    return res.status(400).json({ message: "All fields required" });
   const otpDoc = await Otp.findOne({ email, otp });
-  if (!otpDoc) return res.status(400).json({ message: "Invalid or expired OTP" });
-  if (Date.now() - new Date(otpDoc.createdAt).getTime() > OTP_EXPIRY_SECONDS * 1000) {
+  if (!otpDoc)
+    return res.status(400).json({ message: "Invalid or expired OTP" });
+  if (
+    Date.now() - new Date(otpDoc.createdAt).getTime() >
+    OTP_EXPIRY_SECONDS * 1000
+  ) {
     await Otp.deleteMany({ email });
-    return res.status(400).json({ message: "OTP expired. Please request a new one." });
+    return res
+      .status(400)
+      .json({ message: "OTP expired. Please request a new one." });
   }
   res.status(200).json({ message: "OTP verified" });
 };
 
 export const resetPassword = async (req, res) => {
   const { email, otp, newPassword } = req.body;
-  if (!email || !otp || !newPassword) return res.status(400).json({ message: "All fields required" });
+  if (!email || !otp || !newPassword)
+    return res.status(400).json({ message: "All fields required" });
   const otpDoc = await Otp.findOne({ email, otp });
-  if (!otpDoc) return res.status(400).json({ message: "Invalid or expired OTP" });
-  if (Date.now() - new Date(otpDoc.createdAt).getTime() > OTP_EXPIRY_SECONDS * 1000) {
+  if (!otpDoc)
+    return res.status(400).json({ message: "Invalid or expired OTP" });
+  if (
+    Date.now() - new Date(otpDoc.createdAt).getTime() >
+    OTP_EXPIRY_SECONDS * 1000
+  ) {
     await Otp.deleteMany({ email });
-    return res.status(400).json({ message: "OTP expired. Please request a new one." });
+    return res
+      .status(400)
+      .json({ message: "OTP expired. Please request a new one." });
   }
   const user = await User.findOne({ email });
   if (!user) return res.status(400).json({ message: "User not found" });
@@ -219,24 +265,38 @@ export const resetPassword = async (req, res) => {
 export const refreshToken = async (req, res) => {
   try {
     const token = req.cookies["refreshToken"];
-    if (!token) return res.status(401).json({ message: "No refresh token" });
+    if (!token) {
+      console.log("[refreshToken] No refresh token cookie found");
+      return res.status(401).json({ message: "No refresh token" });
+    }
     let payload;
     try {
-      payload = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+      payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET);
     } catch (err) {
+      console.log("[refreshToken] JWT verification failed:", err.message);
       return res.status(401).json({ message: "Invalid refresh token" });
     }
     const user = await User.findById(payload.userId);
-    if (!user || user.refreshToken !== token) {
+    if (!user) {
+      console.log("[refreshToken] No user found for userId:", payload.userId);
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
+    if (user.refreshToken !== token) {
+      console.log(
+        "[refreshToken] Token mismatch. User's stored token:",
+        user.refreshToken,
+        "Cookie token:",
+        token
+      );
       return res.status(401).json({ message: "Invalid refresh token" });
     }
     const newAccessToken = generateAccessToken(user);
-    // Optionally: issue a new refresh token
-    // const newRefreshToken = generateRefreshToken(user);
-    // await User.updateOne({ _id: user._id }, { $set: { refreshToken: newRefreshToken } });
-    // res.cookie("refreshToken", newRefreshToken, { ... });
+    console.log("[refreshToken] Success for user:", user.email);
     res.json({ token: newAccessToken });
   } catch (error) {
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    console.log("[refreshToken] Internal server error:", error.message);
+    res
+      .status(500)
+      .json({ message: `Internal Server Error: ${error.message}` });
   }
 };

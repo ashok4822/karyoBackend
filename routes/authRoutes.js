@@ -4,6 +4,7 @@ import { loginUser, registerUser, requestOtp, verifyOtp, requestPasswordResetOtp
 import { logout, adminLogout } from "../controllers/profileController.js";
 import passport from "passport";
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt.js";
+import User from "../models/userModel.js";
 
 const router = express.Router();
 
@@ -36,8 +37,11 @@ router.get(
       path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
-    // Redirect to frontend with access token in URL
-    res.redirect(`http://localhost:8080/google-auth-success?token=${accessToken}`);
+    // Save refresh token to user document
+    User.updateOne({ _id: req.user._id }, { $set: { refreshToken } }).then(() => {
+      // Redirect to frontend with access token in URL
+      res.redirect(`http://localhost:8080/google-auth-success?token=${accessToken}`);
+    });
   }
 );
 
