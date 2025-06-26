@@ -2,6 +2,7 @@ import User from "../models/userModel.js";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import cloudinary from "../config/cloudinary.js";
+import ShippingAddress from "../models/shippingAddressModel.js";
 dotenv.config();
 
 export const logout = async function (req, res) {
@@ -43,7 +44,7 @@ export const adminLogout = async function (req, res) {
 export const updateProfile = async function (req, res) {
   try {
     const userId = req.user.userId;
-    const { firstName, lastName, mobileNo } = req.body;
+    const { firstName, lastName, mobileNo, address } = req.body;
 
     // If mobile number is being updated, check for uniqueness
     if (mobileNo) {
@@ -67,6 +68,7 @@ export const updateProfile = async function (req, res) {
       updateData.mobileNo =
         mobileNo.trim() === "" ? undefined : mobileNo.trim();
     }
+    if (address !== undefined) updateData.address = address;
 
     const user = await User.findByIdAndUpdate(
       userId,
@@ -87,7 +89,10 @@ export const updateProfile = async function (req, res) {
         firstName: user.firstName,
         lastName: user.lastName,
         mobileNo: user.mobileNo,
+        address: user.address,
         role: user.role,
+        profileImage: user.profileImage,
+        createdAt: user.createdAt,
       },
     });
   } catch (error) {
@@ -115,6 +120,7 @@ export const getProfile = async function (req, res) {
         firstName: user.firstName,
         lastName: user.lastName,
         mobileNo: user.mobileNo,
+        address: user.address,
         profileImage: user.profileImage,
         role: user.role,
         createdAt: user.createdAt,
@@ -154,6 +160,70 @@ export const uploadProfileImage = async function (req, res) {
       message: "Profile image updated successfully",
       profileImage: user.profileImage,
     });
+  } catch (error) {
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
+export const createShippingAddress = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const {
+      recipientName,
+      addressLine1,
+      addressLine2,
+      city,
+      state,
+      postalCode,
+      country,
+      phoneNumber,
+      isDefault,
+    } = req.body;
+
+    // If isDefault is true, unset previous default
+    if (isDefault) {
+      await ShippingAddress.updateMany({ user: userId, isDefault: true }, { $set: { isDefault: false } });
+    }
+
+    const address = new ShippingAddress({
+      user: userId,
+      recipientName,
+      addressLine1,
+      addressLine2,
+      city,
+      state,
+      postalCode,
+      country,
+      phoneNumber,
+      isDefault: !!isDefault,
+    });
+    await address.save();
+    res.status(201).json({ message: "Shipping address added", address });
+  } catch (error) {
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
+export const getShippingAddresses = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const addresses = await ShippingAddress.find({ user: userId }).sort({ isDefault: -1, createdAt: -1 });
+    res.status(200).json({ addresses });
+  } catch (error) {
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
+export const setDefaultShippingAddress = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const addressId = req.params.id;
+    // Unset previous default
+    await ShippingAddress.updateMany({ user: userId, isDefault: true }, { $set: { isDefault: false } });
+    // Set new default
+    const updated = await ShippingAddress.findByIdAndUpdate(addressId, { $set: { isDefault: true } }, { new: true });
+    if (!updated) return res.status(404).json({ message: 'Address not found' });
+    res.status(200).json({ message: 'Default address set', address: updated });
   } catch (error) {
     res.status(500).json({ message: `Internal Server Error: ${error.message}` });
   }
