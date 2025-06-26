@@ -7,7 +7,6 @@ export const logout = async function (req, res) {
   try {
     const refreshToken = req.cookies["refreshToken"];
     if (refreshToken) {
-      // Find user by refreshToken and clear it
       await User.updateOne({ refreshToken }, { $set: { refreshToken: "" } });
     }
     res.clearCookie("refreshToken", {
@@ -24,11 +23,11 @@ export const logout = async function (req, res) {
 
 export const adminLogout = async function (req, res) {
   try {
-    const refreshToken = req.cookies["refreshToken"];
+    const refreshToken = req.cookies["adminRefreshToken"];
     if (refreshToken) {
       await User.updateOne({ refreshToken }, { $set: { refreshToken: "" } });
     }
-    res.clearCookie("refreshToken", {
+    res.clearCookie("adminRefreshToken", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax",
