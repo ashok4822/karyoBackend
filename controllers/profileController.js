@@ -233,6 +233,78 @@ export const setDefaultShippingAddress = async (req, res) => {
   }
 };
 
+export const updateShippingAddress = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const addressId = req.params.id;
+    const {
+      recipientName,
+      addressLine1,
+      addressLine2,
+      city,
+      state,
+      postalCode,
+      country,
+      phoneNumber,
+      isDefault,
+    } = req.body;
+
+    // Check if address belongs to user
+    const existingAddress = await ShippingAddress.findOne({ _id: addressId, user: userId });
+    if (!existingAddress) {
+      return res.status(404).json({ message: 'Address not found' });
+    }
+
+    // If isDefault is true, unset previous default
+    if (isDefault) {
+      await ShippingAddress.updateMany({ user: userId, isDefault: true }, { $set: { isDefault: false } });
+    }
+
+    const updatedAddress = await ShippingAddress.findByIdAndUpdate(
+      addressId,
+      {
+        recipientName,
+        addressLine1,
+        addressLine2,
+        city,
+        state,
+        postalCode,
+        country,
+        phoneNumber,
+        isDefault: !!isDefault,
+      },
+      { new: true }
+    );
+
+    res.status(200).json({ message: 'Address updated successfully', address: updatedAddress });
+  } catch (error) {
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
+export const deleteShippingAddress = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const addressId = req.params.id;
+
+    // Check if address belongs to user
+    const address = await ShippingAddress.findOne({ _id: addressId, user: userId });
+    if (!address) {
+      return res.status(404).json({ message: 'Address not found' });
+    }
+
+    // If this is the default address, don't allow deletion
+    if (address.isDefault) {
+      return res.status(400).json({ message: 'Cannot delete default address. Please set another address as default first.' });
+    }
+
+    await ShippingAddress.findByIdAndDelete(addressId);
+    res.status(200).json({ message: 'Address deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
 function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
