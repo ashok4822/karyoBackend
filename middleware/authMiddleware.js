@@ -34,6 +34,11 @@ export const verifyToken = async function (req, res, next) {
 
   try {
     const user = await User.findOne({ _id: userId });
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+   
+
     const isValidToken = verifyAccessToken(accessToken);
 
     if (!isValidToken) {
@@ -54,6 +59,7 @@ export const verifyToken = async function (req, res, next) {
     next();
   } catch (error) {
     console.error(`Can't find out the user`);
+    return res.status(401).json({ message: "User validation failed" });
   }
 };
 

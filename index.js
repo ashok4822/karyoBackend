@@ -11,6 +11,7 @@ import { isAdmin, verifyToken } from "./middleware/authMiddleware.js";
 import session from "express-session";
 import passport from "passport";
 import "./config/google.js";
+import wishlistRoutes from "./routes/wishlistRoutes.js";
 dotenv.config();
 
 const app = express();
@@ -73,6 +74,9 @@ app.use("/admin", adminRoutes);
 
 // User routes
 app.use("/users", userRoutes);
+
+// Wishlist routes
+app.use("/wishlist", wishlistRoutes);
 
 //Public routes
 app.use("/", publicRoutes);
