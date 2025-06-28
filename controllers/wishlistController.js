@@ -13,16 +13,30 @@ export const getWishlist = async (req, res) => {
     const itemsWithImage = await Promise.all(
       items.map(async (item) => {
         let image = null;
+        let variantPrice = null;
+        let variantName = null;
+        
         if (item.product && item.variant) {
           const variant = await ProductVariant.findOne({
             product: item.product._id,
             _id: item.variant,
           }).lean();
-          if (variant && variant.imageUrls && variant.imageUrls.length > 0) {
-            image = variant.imageUrls[0];
+          
+          if (variant) {
+            if (variant.imageUrls && variant.imageUrls.length > 0) {
+              image = variant.imageUrls[0];
+            }
+            variantPrice = variant.price;
+            variantName = `${variant.colour} - ${variant.capacity}`;
           }
         }
-        return { ...item, image };
+        
+        return { 
+          ...item, 
+          image,
+          variantPrice,
+          variantName
+        };
       })
     );
 

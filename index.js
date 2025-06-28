@@ -12,6 +12,7 @@ import session from "express-session";
 import passport from "passport";
 import "./config/google.js";
 import wishlistRoutes from "./routes/wishlistRoutes.js";
+import cartRoutes from "./routes/cartRoutes.js";
 dotenv.config();
 
 const app = express();
@@ -77,6 +78,9 @@ app.use("/users", userRoutes);
 
 // Wishlist routes
 app.use("/wishlist", wishlistRoutes);
+
+// Cart routes
+app.use("/cart", cartRoutes);
 
 //Public routes
 app.use("/", publicRoutes);
