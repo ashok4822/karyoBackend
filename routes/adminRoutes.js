@@ -15,6 +15,16 @@ import {
   deleteCategory,
   restoreCategory,
 } from "../controllers/categoryController.js";
+import {
+  listDiscounts,
+  addDiscount,
+  getDiscountById,
+  editDiscount,
+  deleteDiscount,
+  restoreDiscount,
+  getActiveDiscounts,
+  updateDiscountUsage,
+} from "../controllers/discountController.js";
 import multer from "multer";
 import {
   addProduct,
@@ -172,5 +182,15 @@ router.put(
   updateVariant
 );
 router.post("/refresh-token", adminRefreshToken);
+
+// Discount routes
+router.get("/discounts", verifyToken, isAdmin, listDiscounts);
+router.post("/discounts", verifyToken, isAdmin, addDiscount);
+router.get("/discounts/:id", verifyToken, isAdmin, getDiscountById);
+router.put("/discounts/:id", verifyToken, isAdmin, editDiscount);
+router.delete("/discounts/:id", verifyToken, isAdmin, deleteDiscount);
+router.patch("/discounts/:id/restore", verifyToken, isAdmin, restoreDiscount);
+router.get("/discounts/active/all", getActiveDiscounts);
+router.patch("/discounts/:id/usage", updateDiscountUsage);
 
 export default router;
