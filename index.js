@@ -6,6 +6,7 @@ import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import publicRoutes from "./routes/publicRoutes.js";
+import orderRoutes from "./routes/orderRoutes.js";
 import cookieParser from "cookie-parser";
 import { isAdmin, verifyToken } from "./middleware/authMiddleware.js";
 import session from "express-session";
@@ -75,6 +76,9 @@ app.use("/admin", adminRoutes);
 
 // User routes
 app.use("/users", userRoutes);
+
+// Order routes
+app.use("/orders", orderRoutes);
 
 // Wishlist routes
 app.use("/wishlist", wishlistRoutes);
