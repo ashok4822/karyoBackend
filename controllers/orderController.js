@@ -4,6 +4,7 @@ import UserDiscountUsage from "../models/userDiscountUsageModel.js";
 
 // Create a new order
 export const createOrder = async (req, res) => {
+  console.log("createOrder called", req.body, req.user);
   try {
     const {
       items,
@@ -18,7 +19,9 @@ export const createOrder = async (req, res) => {
 
     // Validation
     if (!items || items.length === 0) {
-      return res.status(400).json({ message: "Order must contain at least one item" });
+      return res
+        .status(400)
+        .json({ message: "Order must contain at least one item" });
     }
 
     if (!shippingAddress) {
@@ -26,7 +29,9 @@ export const createOrder = async (req, res) => {
     }
 
     if (!paymentMethod || !["cod", "online"].includes(paymentMethod)) {
-      return res.status(400).json({ message: "Valid payment method is required" });
+      return res
+        .status(400)
+        .json({ message: "Valid payment method is required" });
     }
 
     // Validate discount if provided
@@ -42,22 +47,34 @@ export const createOrder = async (req, res) => {
       }
 
       // Check minimum amount requirement
-      if (discountDoc.minimumAmount > 0 && subtotal < discountDoc.minimumAmount) {
-        return res.status(400).json({ 
-          message: `Minimum order amount of ₹${discountDoc.minimumAmount} required for this discount` 
+      if (
+        discountDoc.minimumAmount > 0 &&
+        subtotal < discountDoc.minimumAmount
+      ) {
+        return res.status(400).json({
+          message: `Minimum order amount of ₹${discountDoc.minimumAmount} required for this discount`,
         });
       }
 
       // Check global usage limit
-      if (discountDoc.maxUsage && discountDoc.usageCount >= discountDoc.maxUsage) {
-        return res.status(400).json({ message: "Discount usage limit reached" });
+      if (
+        discountDoc.maxUsage &&
+        discountDoc.usageCount >= discountDoc.maxUsage
+      ) {
+        return res
+          .status(400)
+          .json({ message: "Discount usage limit reached" });
       }
 
       // Check per-user usage limit
-      const userUsage = await UserDiscountUsage.getOrCreate(req.user._id, discount.discountId);
+      console.log("userId:", req.user.userId);
+      const userUsage = await UserDiscountUsage.getOrCreate(
+        req.user.userId,
+        discount.discountId
+      );
       if (!userUsage.canUseDiscount(discountDoc)) {
-        return res.status(400).json({ 
-          message: `You have reached your personal usage limit for this discount` 
+        return res.status(400).json({
+          message: `You have reached your personal usage limit for this discount`,
         });
       }
 
@@ -73,23 +90,33 @@ export const createOrder = async (req, res) => {
     if (paymentMethod === "cod") {
       // Check if COD is available for the order amount
       if (total > 5000) {
-        return res.status(400).json({ 
-          message: "Cash on Delivery is not available for orders above ₹5,000. Please use online payment." 
+        return res.status(400).json({
+          message:
+            "Cash on Delivery is not available for orders above ₹5,000. Please use online payment.",
         });
       }
 
       // Check if COD is available for the shipping address location
-      const codRestrictedStates = ["Jammu & Kashmir", "Ladakh", "Arunachal Pradesh", "Manipur", "Mizoram", "Nagaland", "Tripura"];
+      const codRestrictedStates = [
+        "Jammu & Kashmir",
+        "Ladakh",
+        "Arunachal Pradesh",
+        "Manipur",
+        "Mizoram",
+        "Nagaland",
+        "Tripura",
+      ];
       if (codRestrictedStates.includes(shippingAddress.state)) {
-        return res.status(400).json({ 
-          message: "Cash on Delivery is not available in your location. Please use online payment." 
+        return res.status(400).json({
+          message:
+            "Cash on Delivery is not available in your location. Please use online payment.",
         });
       }
     }
 
     // Create the order
     const order = new Order({
-      user: req.user._id,
+      user: req.user.userId,
       items,
       shippingAddress,
       paymentMethod,
@@ -107,14 +134,17 @@ export const createOrder = async (req, res) => {
       path: "items.productVariantId",
       populate: {
         path: "product",
-        select: "name brand"
-      }
+        select: "name brand",
+      },
     });
 
     res.status(201).json({
-      message: paymentMethod === "cod" 
-        ? "Order placed successfully with Cash on Delivery! Pay ₹" + total.toFixed(2) + " when your order arrives."
-        : "Order created successfully",
+      message:
+        paymentMethod === "cod"
+          ? "Order placed successfully with Cash on Delivery! Pay ₹" +
+            total.toFixed(2) +
+            " when your order arrives."
+          : "Order created successfully",
       order: {
         _id: order._id,
         orderNumber: order.orderNumber,
@@ -128,21 +158,27 @@ export const createOrder = async (req, res) => {
         total: order.total,
         status: order.status,
         createdAt: order.createdAt,
-        paymentInstructions: paymentMethod === "cod" ? {
-          method: "Cash on Delivery",
-          amount: total,
-          instructions: [
-            "Keep the exact amount ready when your order arrives",
-            "You can inspect the items before payment",
-            "No additional charges for COD",
-            "Payment is due upon delivery"
-          ]
-        } : null,
+        paymentInstructions:
+          paymentMethod === "cod"
+            ? {
+                method: "Cash on Delivery",
+                amount: total,
+                instructions: [
+                  "Keep the exact amount ready when your order arrives",
+                  "You can inspect the items before payment",
+                  "No additional charges for COD",
+                  "Payment is due upon delivery",
+                ],
+              }
+            : null,
       },
     });
   } catch (error) {
     console.error("Error creating order:", error);
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    if (error.stack) console.error(error.stack);
+    res
+      .status(500)
+      .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
 
@@ -153,7 +189,7 @@ export const getUserOrders = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const status = req.query.status; // optional filter
 
-    const query = { user: req.user._id };
+    const query = { user: req.user.userId };
 
     if (status && status !== "all") {
       query.status = status;
@@ -165,8 +201,8 @@ export const getUserOrders = async (req, res) => {
         path: "items.productVariantId",
         populate: {
           path: "product",
-          select: "name brand"
-        }
+          select: "name brand",
+        },
       })
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
@@ -180,7 +216,9 @@ export const getUserOrders = async (req, res) => {
     });
   } catch (error) {
     console.error("Error getting user orders:", error);
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res
+      .status(500)
+      .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
 
@@ -188,14 +226,16 @@ export const getUserOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    const order = await Order.findOne({ _id: id, user: req.user._id })
-      .populate({
-        path: "items.productVariantId",
-        populate: {
-          path: "product",
-          select: "name brand"
-        }
-      });
+    const order = await Order.findOne({
+      _id: id,
+      user: req.user.userId,
+    }).populate({
+      path: "items.productVariantId",
+      populate: {
+        path: "product",
+        select: "name brand",
+      },
+    });
 
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
@@ -204,7 +244,9 @@ export const getOrderById = async (req, res) => {
     res.json({ order });
   } catch (error) {
     console.error("Error getting order:", error);
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res
+      .status(500)
+      .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
 
@@ -212,7 +254,7 @@ export const getOrderById = async (req, res) => {
 export const cancelOrder = async (req, res) => {
   try {
     const { id } = req.params;
-    const order = await Order.findOne({ _id: id, user: req.user._id });
+    const order = await Order.findOne({ _id: id, user: req.user.userId });
 
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
@@ -220,25 +262,27 @@ export const cancelOrder = async (req, res) => {
 
     // Only allow cancellation of pending orders
     if (order.status !== "pending") {
-      return res.status(400).json({ 
-        message: "Only pending orders can be cancelled" 
+      return res.status(400).json({
+        message: "Only pending orders can be cancelled",
       });
     }
 
     order.status = "cancelled";
     await order.save();
 
-    res.json({ 
+    res.json({
       message: "Order cancelled successfully",
       order: {
         _id: order._id,
         orderNumber: order.orderNumber,
         status: order.status,
-      }
+      },
     });
   } catch (error) {
     console.error("Error cancelling order:", error);
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res
+      .status(500)
+      .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
 
@@ -248,19 +292,19 @@ export const checkCODAvailability = async (req, res) => {
     const { state, total } = req.body;
 
     if (!state || !total) {
-      return res.status(400).json({ 
-        message: "State and total amount are required" 
+      return res.status(400).json({
+        message: "State and total amount are required",
       });
     }
 
     const codRestrictedStates = [
-      "Jammu & Kashmir", 
-      "Ladakh", 
-      "Arunachal Pradesh", 
-      "Manipur", 
-      "Mizoram", 
-      "Nagaland", 
-      "Tripura"
+      "Jammu & Kashmir",
+      "Ladakh",
+      "Arunachal Pradesh",
+      "Manipur",
+      "Mizoram",
+      "Nagaland",
+      "Tripura",
     ];
 
     const isLocationRestricted = codRestrictedStates.includes(state);
@@ -271,15 +315,21 @@ export const checkCODAvailability = async (req, res) => {
     res.json({
       isAvailable,
       restrictions: {
-        location: isLocationRestricted ? "COD not available in your location" : null,
-        amount: isAmountRestricted ? "COD not available for orders above ₹5,000" : null
+        location: isLocationRestricted
+          ? "COD not available in your location"
+          : null,
+        amount: isAmountRestricted
+          ? "COD not available for orders above ₹5,000"
+          : null,
       },
-      message: isAvailable 
+      message: isAvailable
         ? "Cash on Delivery is available for your order"
-        : "Cash on Delivery is not available for your order"
+        : "Cash on Delivery is not available for your order",
     });
   } catch (error) {
     console.error("Error checking COD availability:", error);
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res
+      .status(500)
+      .json({ message: `Internal Server Error: ${error.message}` });
   }
-}; 
+};

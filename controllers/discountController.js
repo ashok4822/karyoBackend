@@ -355,6 +355,60 @@ export const getActiveDiscounts = async (req, res) => {
   }
 };
 
+// Get user-eligible discounts (checks all eligibility criteria)
+export const getUserEligibleDiscounts = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const now = new Date();
+    
+    // Get all active and valid discounts
+    const discounts = await Discount.find({
+      status: "active",
+      validFrom: { $lte: now },
+      validTo: { $gte: now },
+      isDeleted: false,
+    }).sort({ createdAt: -1 });
+
+    // Get user's discount usage for all discounts
+    const userUsages = await UserDiscountUsage.find({ user: userId });
+    const userUsageMap = new Map();
+    userUsages.forEach(usage => {
+      userUsageMap.set(usage.discount.toString(), usage);
+    });
+
+    // Filter discounts based on eligibility criteria
+    const eligibleDiscounts = [];
+    
+    for (const discount of discounts) {
+      // Check global usage limit
+      if (discount.maxUsage && discount.usageCount >= discount.maxUsage) {
+        continue; // Skip if global limit reached
+      }
+      
+      // Check user-specific usage limit
+      const userUsage = userUsageMap.get(discount._id.toString());
+      if (discount.maxUsagePerUser && userUsage && userUsage.usageCount >= discount.maxUsagePerUser) {
+        continue; // Skip if user limit reached
+      }
+      
+      // Add discount with eligibility info
+      const discountObj = discount.toObject();
+      discountObj.isValid = discount.isValid;
+      discountObj.userUsageCount = userUsage ? userUsage.usageCount : 0;
+      discountObj.canUse = true;
+      
+      eligibleDiscounts.push(discountObj);
+    }
+
+    res.json({ discounts: eligibleDiscounts });
+  } catch (error) {
+    console.error("Error getting user eligible discounts:", error);
+    res
+      .status(500)
+      .json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
 // Update discount usage count
 export const updateDiscountUsage = async (req, res) => {
   try {
