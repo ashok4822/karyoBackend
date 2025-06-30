@@ -50,6 +50,10 @@ const discountSchema = new mongoose.Schema({
     type: Number,
     default: null, // null means unlimited
   },
+  maxUsagePerUser: {
+    type: Number,
+    default: null, // null means unlimited per user
+  },
   isDeleted: {
     type: Boolean,
     default: false,

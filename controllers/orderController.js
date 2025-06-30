@@ -1,5 +1,6 @@
 import Order from "../models/orderModel.js";
 import Discount from "../models/discountModel.js";
+import UserDiscountUsage from "../models/userDiscountUsageModel.js";
 
 // Create a new order
 export const createOrder = async (req, res) => {
@@ -47,13 +48,43 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      // Update discount usage count
+      // Check global usage limit
       if (discountDoc.maxUsage && discountDoc.usageCount >= discountDoc.maxUsage) {
         return res.status(400).json({ message: "Discount usage limit reached" });
       }
 
+      // Check per-user usage limit
+      const userUsage = await UserDiscountUsage.getOrCreate(req.user._id, discount.discountId);
+      if (!userUsage.canUseDiscount(discountDoc)) {
+        return res.status(400).json({ 
+          message: `You have reached your personal usage limit for this discount` 
+        });
+      }
+
+      // Update global discount usage count
       discountDoc.usageCount += 1;
       await discountDoc.save();
+
+      // Update user-specific usage count
+      await userUsage.incrementUsage();
+    }
+
+    // COD-specific validations
+    if (paymentMethod === "cod") {
+      // Check if COD is available for the order amount
+      if (total > 5000) {
+        return res.status(400).json({ 
+          message: "Cash on Delivery is not available for orders above ₹5,000. Please use online payment." 
+        });
+      }
+
+      // Check if COD is available for the shipping address location
+      const codRestrictedStates = ["Jammu & Kashmir", "Ladakh", "Arunachal Pradesh", "Manipur", "Mizoram", "Nagaland", "Tripura"];
+      if (codRestrictedStates.includes(shippingAddress.state)) {
+        return res.status(400).json({ 
+          message: "Cash on Delivery is not available in your location. Please use online payment." 
+        });
+      }
     }
 
     // Create the order
@@ -81,7 +112,9 @@ export const createOrder = async (req, res) => {
     });
 
     res.status(201).json({
-      message: "Order created successfully",
+      message: paymentMethod === "cod" 
+        ? "Order placed successfully with Cash on Delivery! Pay ₹" + total.toFixed(2) + " when your order arrives."
+        : "Order created successfully",
       order: {
         _id: order._id,
         orderNumber: order.orderNumber,
@@ -95,6 +128,16 @@ export const createOrder = async (req, res) => {
         total: order.total,
         status: order.status,
         createdAt: order.createdAt,
+        paymentInstructions: paymentMethod === "cod" ? {
+          method: "Cash on Delivery",
+          amount: total,
+          instructions: [
+            "Keep the exact amount ready when your order arrives",
+            "You can inspect the items before payment",
+            "No additional charges for COD",
+            "Payment is due upon delivery"
+          ]
+        } : null,
       },
     });
   } catch (error) {
@@ -195,6 +238,48 @@ export const cancelOrder = async (req, res) => {
     });
   } catch (error) {
     console.error("Error cancelling order:", error);
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
+// Check COD availability
+export const checkCODAvailability = async (req, res) => {
+  try {
+    const { state, total } = req.body;
+
+    if (!state || !total) {
+      return res.status(400).json({ 
+        message: "State and total amount are required" 
+      });
+    }
+
+    const codRestrictedStates = [
+      "Jammu & Kashmir", 
+      "Ladakh", 
+      "Arunachal Pradesh", 
+      "Manipur", 
+      "Mizoram", 
+      "Nagaland", 
+      "Tripura"
+    ];
+
+    const isLocationRestricted = codRestrictedStates.includes(state);
+    const isAmountRestricted = total > 5000;
+
+    const isAvailable = !isLocationRestricted && !isAmountRestricted;
+
+    res.json({
+      isAvailable,
+      restrictions: {
+        location: isLocationRestricted ? "COD not available in your location" : null,
+        amount: isAmountRestricted ? "COD not available for orders above ₹5,000" : null
+      },
+      message: isAvailable 
+        ? "Cash on Delivery is available for your order"
+        : "Cash on Delivery is not available for your order"
+    });
+  } catch (error) {
+    console.error("Error checking COD availability:", error);
     res.status(500).json({ message: `Internal Server Error: ${error.message}` });
   }
 }; 

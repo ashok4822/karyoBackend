@@ -1,4 +1,6 @@
 import Discount from "../models/discountModel.js";
+import User from "../models/userModel.js";
+import UserDiscountUsage from "../models/userDiscountUsageModel.js";
 
 // List discounts with search, pagination, sort, and filter by status
 export const listDiscounts = async (req, res) => {
@@ -75,6 +77,7 @@ export const addDiscount = async (req, res) => {
       validTo,
       status,
       maxUsage,
+      maxUsagePerUser,
     } = req.body;
 
     // Validation
@@ -136,6 +139,7 @@ export const addDiscount = async (req, res) => {
       validTo: new Date(validTo),
       status: status || "active",
       maxUsage: maxUsage ? parseInt(maxUsage) : null,
+      maxUsagePerUser: maxUsagePerUser ? parseInt(maxUsagePerUser) : null,
     });
 
     await discount.save();
@@ -194,6 +198,7 @@ export const editDiscount = async (req, res) => {
       validTo,
       status,
       maxUsage,
+      maxUsagePerUser,
     } = req.body;
 
     const discount = await Discount.findOne({ _id: id, isDeleted: false });
@@ -252,6 +257,7 @@ export const editDiscount = async (req, res) => {
     if (validTo !== undefined) discount.validTo = new Date(validTo);
     if (status !== undefined) discount.status = status;
     if (maxUsage !== undefined) discount.maxUsage = maxUsage ? parseInt(maxUsage) : null;
+    if (maxUsagePerUser !== undefined) discount.maxUsagePerUser = maxUsagePerUser ? parseInt(maxUsagePerUser) : null;
 
     await discount.save();
 
@@ -376,5 +382,140 @@ export const updateDiscountUsage = async (req, res) => {
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
+// Get user discount usage statistics
+export const getUserDiscountUsage = async (req, res) => {
+  try {
+    const { discountId } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || "";
+
+    // Verify discount exists
+    const discount = await Discount.findById(discountId);
+    if (!discount) {
+      return res.status(404).json({ message: "Discount not found" });
+    }
+
+    const query = { discount: discountId };
+
+    // Add search filter for user details
+    if (search) {
+      const users = await User.find({
+        $or: [
+          { firstName: { $regex: search, $options: "i" } },
+          { lastName: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ],
+      }).select("_id");
+      
+      const userIds = users.map(user => user._id);
+      query.user = { $in: userIds };
+    }
+
+    const total = await UserDiscountUsage.countDocuments(query);
+    const userUsages = await UserDiscountUsage.find(query)
+      .populate({
+        path: "user",
+        select: "firstName lastName email phone"
+      })
+      .sort({ usageCount: -1, lastUsedAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    res.json({
+      discount: {
+        _id: discount._id,
+        name: discount.name,
+        maxUsagePerUser: discount.maxUsagePerUser,
+      },
+      userUsages,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    console.error("Error getting user discount usage:", error);
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
+// Get all discount usage statistics
+export const getAllDiscountUsageStats = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || "";
+
+    const query = {};
+
+    // Add search filter for discount names
+    if (search) {
+      const discounts = await Discount.find({
+        name: { $regex: search, $options: "i" },
+        isDeleted: false,
+      }).select("_id");
+      
+      const discountIds = discounts.map(discount => discount._id);
+      query.discount = { $in: discountIds };
+    }
+
+    const total = await UserDiscountUsage.countDocuments(query);
+    const usageStats = await UserDiscountUsage.find(query)
+      .populate({
+        path: "discount",
+        select: "name maxUsagePerUser"
+      })
+      .populate({
+        path: "user",
+        select: "firstName lastName email"
+      })
+      .sort({ updatedAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    // Group by discount for summary
+    const discountSummary = await UserDiscountUsage.aggregate([
+      {
+        $group: {
+          _id: "$discount",
+          totalUsers: { $sum: 1 },
+          totalUsage: { $sum: "$usageCount" },
+          avgUsagePerUser: { $avg: "$usageCount" }
+        }
+      },
+      {
+        $lookup: {
+          from: "discounts",
+          localField: "_id",
+          foreignField: "_id",
+          as: "discountInfo"
+        }
+      },
+      {
+        $unwind: "$discountInfo"
+      },
+      {
+        $project: {
+          discountName: "$discountInfo.name",
+          totalUsers: 1,
+          totalUsage: 1,
+          avgUsagePerUser: { $round: ["$avgUsagePerUser", 2] }
+        }
+      }
+    ]);
+
+    res.json({
+      usageStats,
+      discountSummary,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    console.error("Error getting all discount usage stats:", error);
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
   }
 }; 
