@@ -1,6 +1,7 @@
 import Order from "../models/orderModel.js";
 import Discount from "../models/discountModel.js";
 import UserDiscountUsage from "../models/userDiscountUsageModel.js";
+import mongoose from "mongoose";
 
 // Create a new order
 export const createOrder = async (req, res) => {
@@ -129,6 +130,14 @@ export const createOrder = async (req, res) => {
 
     await order.save();
 
+    // Decrement stock for each ordered product variant
+    for (const item of items) {
+      await mongoose.model("ProductVariant").findByIdAndUpdate(
+        item.productVariantId,
+        { $inc: { stock: -item.quantity } }
+      );
+    }
+
     // Populate product details for response
     await order.populate({
       path: "items.productVariantId",
@@ -254,6 +263,7 @@ export const getOrderById = async (req, res) => {
 export const cancelOrder = async (req, res) => {
   try {
     const { id } = req.params;
+    const { reason, productVariantIds } = req.body;
     const order = await Order.findOne({ _id: id, user: req.user.userId });
 
     if (!order) {
@@ -267,15 +277,71 @@ export const cancelOrder = async (req, res) => {
       });
     }
 
-    order.status = "cancelled";
-    await order.save();
+    // If productVariantIds provided, cancel specific products
+    if (Array.isArray(productVariantIds) && productVariantIds.length > 0) {
+      let anyCancelled = false;
+      for (const item of order.items) {
+        if (
+          productVariantIds.includes(item.productVariantId.toString()) &&
+          !item.cancelled
+        ) {
+          item.cancelled = true;
+          item.cancellationReason = reason || "";
+          // Increment stock for the product variant
+          await mongoose.model("ProductVariant").findByIdAndUpdate(
+            item.productVariantId,
+            { $inc: { stock: item.quantity } }
+          );
+          anyCancelled = true;
+        }
+      }
+      if (!anyCancelled) {
+        return res.status(400).json({ message: "No valid items to cancel." });
+      }
+      // If all items are now cancelled, set order status to cancelled
+      if (order.items.every((item) => item.cancelled)) {
+        order.status = "cancelled";
+        order.cancellationReason = reason || "";
+      }
+      await order.save();
+      return res.json({
+        message:
+          order.status === "cancelled"
+            ? "Order cancelled successfully"
+            : "Selected products cancelled successfully",
+        order: {
+          _id: order._id,
+          orderNumber: order.orderNumber,
+          status: order.status,
+          items: order.items,
+          total: order.total,
+        },
+      });
+    }
 
+    // Otherwise, cancel the whole order
+    order.status = "cancelled";
+    order.cancellationReason = reason || "";
+    // Increment stock for all items
+    for (const item of order.items) {
+      if (!item.cancelled) {
+        await mongoose.model("ProductVariant").findByIdAndUpdate(
+          item.productVariantId,
+          { $inc: { stock: item.quantity } }
+        );
+        item.cancelled = true;
+        item.cancellationReason = reason || "";
+      }
+    }
+    await order.save();
     res.json({
       message: "Order cancelled successfully",
       order: {
         _id: order._id,
         orderNumber: order.orderNumber,
         status: order.status,
+        items: order.items,
+        total: order.total,
       },
     });
   } catch (error) {

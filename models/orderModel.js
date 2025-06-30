@@ -23,6 +23,14 @@ const orderSchema = new mongoose.Schema({
         required: true,
         min: 0,
       },
+      cancelled: {
+        type: Boolean,
+        default: false,
+      },
+      cancellationReason: {
+        type: String,
+        default: "",
+      },
     },
   ],
   shippingAddress: {
@@ -122,6 +130,10 @@ const orderSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now,
+  },
+  cancellationReason: {
+    type: String,
+    default: "",
   },
 });
 
