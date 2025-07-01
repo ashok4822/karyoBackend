@@ -493,3 +493,61 @@ export const updateOrderStatus = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// Delete order
+export const deleteOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await Order.findByIdAndDelete(id);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+    res.json({ message: "Order deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Return order
+export const returnOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: 'Reason for return is required.' });
+    }
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found.' });
+    }
+    if (order.status !== 'delivered') {
+      return res.status(400).json({ message: 'Only delivered orders can be returned.' });
+    }
+    order.status = 'returned';
+    order.cancellationReason = reason;
+    await order.save();
+    res.json({ message: 'Order return requested successfully.', order });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Verify return request
+export const verifyReturnRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found.' });
+    }
+    if (order.status !== 'returned') {
+      return res.status(400).json({ message: 'Only orders with status "returned" can be verified.' });
+    }
+    order.status = 'return_verified';
+    // Optionally, log admin who verified: order.returnVerifiedBy = req.user.userId;
+    await order.save();
+    res.json({ message: 'Return request verified successfully.', order });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

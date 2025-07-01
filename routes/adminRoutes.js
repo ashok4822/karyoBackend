@@ -44,7 +44,7 @@ import { verifyAdmin } from "../middleware/authMiddleware.js";
 import fs from "fs";
 import path from "path";
 import { getDashboard } from "../controllers/adminDashboard.js";
-import { getAllOrders, getOrderByIdForAdmin, updateOrderStatus } from "../controllers/orderController.js";
+import { getAllOrders, getOrderByIdForAdmin, updateOrderStatus, deleteOrder, verifyReturnRequest } from "../controllers/orderController.js";
 
 const router = express.Router();
 
@@ -201,5 +201,7 @@ router.get("/discounts/:discountId/user-usage", verifyToken, isAdmin, getUserDis
 router.get("/orders", verifyToken, isAdmin, getAllOrders);
 router.get("/orders/:id", verifyToken, isAdmin, getOrderByIdForAdmin);
 router.put("/orders/:id/status", verifyToken, isAdmin, updateOrderStatus);
+router.delete("/orders/:id", verifyToken, isAdmin, deleteOrder);
+router.put("/orders/:id/verify-return", verifyToken, isAdmin, verifyReturnRequest);
 
 export default router;

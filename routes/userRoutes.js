@@ -5,6 +5,7 @@ import path from "path";
 import { getProfile, updateProfile, uploadProfileImage, createShippingAddress, getShippingAddresses, setDefaultShippingAddress, updateShippingAddress, deleteShippingAddress, requestEmailChangeOtp, verifyEmailChangeOtp } from "../controllers/profileController.js";
 import { getUserEligibleDiscounts } from "../controllers/discountController.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
+import { returnOrder } from '../controllers/orderController.js';
 
 const router = express.Router();
 
@@ -30,6 +31,7 @@ router.delete("/shipping-address/:id", verifyToken, deleteShippingAddress);
 router.post("/request-email-change-otp", verifyToken, requestEmailChangeOtp);
 router.post("/verify-email-change-otp", verifyToken, verifyEmailChangeOtp);
 router.get("/discounts/eligible", verifyToken, getUserEligibleDiscounts);
+router.post('/orders/:id/return', verifyToken, returnOrder);
 
 export default router;
 
