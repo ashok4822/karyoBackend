@@ -79,6 +79,15 @@ const orderSchema = new mongoose.Schema({
     enum: ["cod", "online"],
     required: true,
   },
+  transactionId: {
+    type: String,
+    default: "",
+  },
+  paymentStatus: {
+    type: String,
+    enum: ["pending", "paid", "failed", "refunded"],
+    default: "pending",
+  },
   subtotal: {
     type: Number,
     required: true,

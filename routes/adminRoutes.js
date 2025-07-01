@@ -44,6 +44,7 @@ import { verifyAdmin } from "../middleware/authMiddleware.js";
 import fs from "fs";
 import path from "path";
 import { getDashboard } from "../controllers/adminDashboard.js";
+import { getAllOrders, getOrderByIdForAdmin, updateOrderStatus } from "../controllers/orderController.js";
 
 const router = express.Router();
 
@@ -196,5 +197,9 @@ router.delete("/discounts/:id", verifyToken, isAdmin, deleteDiscount);
 router.patch("/discounts/:id/restore", verifyToken, isAdmin, restoreDiscount);
 router.patch("/discounts/:id/usage", updateDiscountUsage);
 router.get("/discounts/:discountId/user-usage", verifyToken, isAdmin, getUserDiscountUsage);
+
+router.get("/orders", verifyToken, isAdmin, getAllOrders);
+router.get("/orders/:id", verifyToken, isAdmin, getOrderByIdForAdmin);
+router.put("/orders/:id/status", verifyToken, isAdmin, updateOrderStatus);
 
 export default router;

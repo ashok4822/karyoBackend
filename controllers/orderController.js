@@ -259,6 +259,42 @@ export const getOrderById = async (req, res) => {
   }
 };
 
+// Get order by ID (admin)
+export const getOrderByIdForAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await Order.findOne({ _id: id })
+      .populate({
+        path: "user",
+        select: "username firstName lastName email address mobileNo",
+      })
+      .populate({
+        path: "items.productVariantId",
+        populate: {
+          path: "product",
+          select: "name brand",
+        },
+      });
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+    // Compose payment object for frontend compatibility
+    const payment = {
+      method: order.paymentMethod || '-',
+      status: order.paymentStatus || 'pending',
+      transactionId: order.transactionId || '-',
+    };
+    // Compose shipping object with only status
+    const shipping = {
+      status: order.status || '-',
+    };
+    res.json({ order: { ...order.toObject(), payment, shipping } });
+  } catch (error) {
+    console.error("Error getting order (admin):", error);
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
 // Cancel order
 export const cancelOrder = async (req, res) => {
   try {
@@ -397,5 +433,63 @@ export const checkCODAvailability = async (req, res) => {
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
+// Get all orders (admin)
+export const getAllOrders = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const status = req.query.status; // optional filter
+
+    const query = {};
+    if (status && status !== "all") {
+      query.status = status;
+    }
+
+    const total = await Order.countDocuments(query);
+    const orders = await Order.find(query)
+      .populate({
+        path: "user",
+        select: "username firstName lastName email",
+      })
+      .populate({
+        path: "items.productVariantId",
+        populate: {
+          path: "product",
+          select: "name brand",
+        },
+      })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    res.json({
+      orders,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    console.error("Error getting all orders:", error);
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
+// Update order status
+export const updateOrderStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+    order.status = status;
+    await order.save();
+    res.json({ message: "Order status updated", order });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
