@@ -6,6 +6,7 @@ import { getProfile, updateProfile, uploadProfileImage, createShippingAddress, g
 import { getUserEligibleDiscounts } from "../controllers/discountController.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
 import { returnOrder } from '../controllers/orderController.js';
+import { getWallet, addFunds, deductFunds, getTransactions } from "../controllers/walletController.js";
 
 const router = express.Router();
 
@@ -32,6 +33,10 @@ router.post("/request-email-change-otp", verifyToken, requestEmailChangeOtp);
 router.post("/verify-email-change-otp", verifyToken, verifyEmailChangeOtp);
 router.get("/discounts/eligible", verifyToken, getUserEligibleDiscounts);
 router.post('/orders/:id/return', verifyToken, returnOrder);
+router.get("/wallet", verifyToken, getWallet);
+router.post("/wallet/add", verifyToken, addFunds);
+router.post("/wallet/deduct", verifyToken, deductFunds);
+router.get("/wallet/transactions", verifyToken, getTransactions);
 
 export default router;
 
