@@ -86,32 +86,32 @@ export const addDiscount = async (req, res) => {
     }
 
     if (!discountType || !["percentage", "fixed"].includes(discountType)) {
-      return res.status(400).json({ 
-        message: "Discount type must be 'percentage' or 'fixed'" 
+      return res.status(400).json({
+        message: "Discount type must be 'percentage' or 'fixed'",
       });
     }
 
     if (!discountValue || discountValue <= 0) {
-      return res.status(400).json({ 
-        message: "Discount value must be greater than 0" 
+      return res.status(400).json({
+        message: "Discount value must be greater than 0",
       });
     }
 
     if (discountType === "percentage" && discountValue > 100) {
-      return res.status(400).json({ 
-        message: "Percentage discount cannot exceed 100%" 
+      return res.status(400).json({
+        message: "Percentage discount cannot exceed 100%",
       });
     }
 
     if (!validFrom || !validTo) {
-      return res.status(400).json({ 
-        message: "Valid from and valid to dates are required" 
+      return res.status(400).json({
+        message: "Valid from and valid to dates are required",
       });
     }
 
     if (new Date(validFrom) >= new Date(validTo)) {
-      return res.status(400).json({ 
-        message: "Valid to date must be after valid from date" 
+      return res.status(400).json({
+        message: "Valid to date must be after valid from date",
       });
     }
 
@@ -122,8 +122,8 @@ export const addDiscount = async (req, res) => {
     });
 
     if (existingDiscount) {
-      return res.status(400).json({ 
-        message: "Discount with this name already exists" 
+      return res.status(400).json({
+        message: "Discount with this name already exists",
       });
     }
 
@@ -148,9 +148,9 @@ export const addDiscount = async (req, res) => {
     const discountWithVirtuals = discount.toObject();
     discountWithVirtuals.isValid = discount.isValid;
 
-    res.status(201).json({ 
-      message: "Discount created successfully", 
-      discount: discountWithVirtuals 
+    res.status(201).json({
+      message: "Discount created successfully",
+      discount: discountWithVirtuals,
     });
   } catch (error) {
     console.error("Error adding discount:", error);
@@ -208,26 +208,26 @@ export const editDiscount = async (req, res) => {
 
     // Validation
     if (discountType && !["percentage", "fixed"].includes(discountType)) {
-      return res.status(400).json({ 
-        message: "Discount type must be 'percentage' or 'fixed'" 
+      return res.status(400).json({
+        message: "Discount type must be 'percentage' or 'fixed'",
       });
     }
 
     if (discountValue !== undefined && discountValue <= 0) {
-      return res.status(400).json({ 
-        message: "Discount value must be greater than 0" 
+      return res.status(400).json({
+        message: "Discount value must be greater than 0",
       });
     }
 
     if (discountType === "percentage" && discountValue > 100) {
-      return res.status(400).json({ 
-        message: "Percentage discount cannot exceed 100%" 
+      return res.status(400).json({
+        message: "Percentage discount cannot exceed 100%",
       });
     }
 
     if (validFrom && validTo && new Date(validFrom) >= new Date(validTo)) {
-      return res.status(400).json({ 
-        message: "Valid to date must be after valid from date" 
+      return res.status(400).json({
+        message: "Valid to date must be after valid from date",
       });
     }
 
@@ -240,8 +240,8 @@ export const editDiscount = async (req, res) => {
       });
 
       if (existingDiscount) {
-        return res.status(400).json({ 
-          message: "Discount with this name already exists" 
+        return res.status(400).json({
+          message: "Discount with this name already exists",
         });
       }
     }
@@ -250,14 +250,23 @@ export const editDiscount = async (req, res) => {
     if (name !== undefined) discount.name = name;
     if (description !== undefined) discount.description = description;
     if (discountType !== undefined) discount.discountType = discountType;
-    if (discountValue !== undefined) discount.discountValue = parseFloat(discountValue);
-    if (minimumAmount !== undefined) discount.minimumAmount = parseFloat(minimumAmount);
-    if (maximumDiscount !== undefined) discount.maximumDiscount = maximumDiscount ? parseFloat(maximumDiscount) : null;
+    if (discountValue !== undefined)
+      discount.discountValue = parseFloat(discountValue);
+    if (minimumAmount !== undefined)
+      discount.minimumAmount = parseFloat(minimumAmount);
+    if (maximumDiscount !== undefined)
+      discount.maximumDiscount = maximumDiscount
+        ? parseFloat(maximumDiscount)
+        : null;
     if (validFrom !== undefined) discount.validFrom = new Date(validFrom);
     if (validTo !== undefined) discount.validTo = new Date(validTo);
     if (status !== undefined) discount.status = status;
-    if (maxUsage !== undefined) discount.maxUsage = maxUsage ? parseInt(maxUsage) : null;
-    if (maxUsagePerUser !== undefined) discount.maxUsagePerUser = maxUsagePerUser ? parseInt(maxUsagePerUser) : null;
+    if (maxUsage !== undefined)
+      discount.maxUsage = maxUsage ? parseInt(maxUsage) : null;
+    if (maxUsagePerUser !== undefined)
+      discount.maxUsagePerUser = maxUsagePerUser
+        ? parseInt(maxUsagePerUser)
+        : null;
 
     await discount.save();
 
@@ -265,9 +274,9 @@ export const editDiscount = async (req, res) => {
     const discountWithVirtuals = discount.toObject();
     discountWithVirtuals.isValid = discount.isValid;
 
-    res.json({ 
-      message: "Discount updated successfully", 
-      discount: discountWithVirtuals 
+    res.json({
+      message: "Discount updated successfully",
+      discount: discountWithVirtuals,
     });
   } catch (error) {
     console.error("Error editing discount:", error);
@@ -316,9 +325,9 @@ export const restoreDiscount = async (req, res) => {
     const discountWithVirtuals = discount.toObject();
     discountWithVirtuals.isValid = discount.isValid;
 
-    res.json({ 
-      message: "Discount restored successfully", 
-      discount: discountWithVirtuals 
+    res.json({
+      message: "Discount restored successfully",
+      discount: discountWithVirtuals,
     });
   } catch (error) {
     console.error("Error restoring discount:", error);
@@ -358,9 +367,10 @@ export const getActiveDiscounts = async (req, res) => {
 // Get user-eligible discounts (checks all eligibility criteria)
 export const getUserEligibleDiscounts = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.userId;
+    console.log("--------backend user in discount: ", userId);
     const now = new Date();
-    
+
     // Get all active and valid discounts
     const discounts = await Discount.find({
       status: "active",
@@ -372,31 +382,35 @@ export const getUserEligibleDiscounts = async (req, res) => {
     // Get user's discount usage for all discounts
     const userUsages = await UserDiscountUsage.find({ user: userId });
     const userUsageMap = new Map();
-    userUsages.forEach(usage => {
+    userUsages.forEach((usage) => {
       userUsageMap.set(usage.discount.toString(), usage);
     });
 
     // Filter discounts based on eligibility criteria
     const eligibleDiscounts = [];
-    
+
     for (const discount of discounts) {
       // Check global usage limit
       if (discount.maxUsage && discount.usageCount >= discount.maxUsage) {
         continue; // Skip if global limit reached
       }
-      
+
       // Check user-specific usage limit
       const userUsage = userUsageMap.get(discount._id.toString());
-      if (discount.maxUsagePerUser && userUsage && userUsage.usageCount >= discount.maxUsagePerUser) {
+      if (
+        discount.maxUsagePerUser &&
+        userUsage &&
+        userUsage.usageCount >= discount.maxUsagePerUser
+      ) {
         continue; // Skip if user limit reached
       }
-      
+
       // Add discount with eligibility info
       const discountObj = discount.toObject();
       discountObj.isValid = discount.isValid;
       discountObj.userUsageCount = userUsage ? userUsage.usageCount : 0;
       discountObj.canUse = true;
-      
+
       eligibleDiscounts.push(discountObj);
     }
 
@@ -427,9 +441,9 @@ export const updateDiscountUsage = async (req, res) => {
     discount.usageCount += 1;
     await discount.save();
 
-    res.json({ 
-      message: "Discount usage updated", 
-      usageCount: discount.usageCount 
+    res.json({
+      message: "Discount usage updated",
+      usageCount: discount.usageCount,
     });
   } catch (error) {
     console.error("Error updating discount usage:", error);
@@ -464,8 +478,8 @@ export const getUserDiscountUsage = async (req, res) => {
           { email: { $regex: search, $options: "i" } },
         ],
       }).select("_id");
-      
-      const userIds = users.map(user => user._id);
+
+      const userIds = users.map((user) => user._id);
       query.user = { $in: userIds };
     }
 
@@ -473,7 +487,7 @@ export const getUserDiscountUsage = async (req, res) => {
     const userUsages = await UserDiscountUsage.find(query)
       .populate({
         path: "user",
-        select: "firstName lastName email phone"
+        select: "firstName lastName email phone",
       })
       .sort({ usageCount: -1, lastUsedAt: -1 })
       .skip((page - 1) * limit)
@@ -492,7 +506,9 @@ export const getUserDiscountUsage = async (req, res) => {
     });
   } catch (error) {
     console.error("Error getting user discount usage:", error);
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res
+      .status(500)
+      .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
 
@@ -511,8 +527,8 @@ export const getAllDiscountUsageStats = async (req, res) => {
         name: { $regex: search, $options: "i" },
         isDeleted: false,
       }).select("_id");
-      
-      const discountIds = discounts.map(discount => discount._id);
+
+      const discountIds = discounts.map((discount) => discount._id);
       query.discount = { $in: discountIds };
     }
 
@@ -520,11 +536,11 @@ export const getAllDiscountUsageStats = async (req, res) => {
     const usageStats = await UserDiscountUsage.find(query)
       .populate({
         path: "discount",
-        select: "name maxUsagePerUser"
+        select: "name maxUsagePerUser",
       })
       .populate({
         path: "user",
-        select: "firstName lastName email"
+        select: "firstName lastName email",
       })
       .sort({ updatedAt: -1 })
       .skip((page - 1) * limit)
@@ -537,28 +553,28 @@ export const getAllDiscountUsageStats = async (req, res) => {
           _id: "$discount",
           totalUsers: { $sum: 1 },
           totalUsage: { $sum: "$usageCount" },
-          avgUsagePerUser: { $avg: "$usageCount" }
-        }
+          avgUsagePerUser: { $avg: "$usageCount" },
+        },
       },
       {
         $lookup: {
           from: "discounts",
           localField: "_id",
           foreignField: "_id",
-          as: "discountInfo"
-        }
+          as: "discountInfo",
+        },
       },
       {
-        $unwind: "$discountInfo"
+        $unwind: "$discountInfo",
       },
       {
         $project: {
           discountName: "$discountInfo.name",
           totalUsers: 1,
           totalUsage: 1,
-          avgUsagePerUser: { $round: ["$avgUsagePerUser", 2] }
-        }
-      }
+          avgUsagePerUser: { $round: ["$avgUsagePerUser", 2] },
+        },
+      },
     ]);
 
     res.json({
@@ -570,6 +586,8 @@ export const getAllDiscountUsageStats = async (req, res) => {
     });
   } catch (error) {
     console.error("Error getting all discount usage stats:", error);
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res
+      .status(500)
+      .json({ message: `Internal Server Error: ${error.message}` });
   }
-}; 
+};
