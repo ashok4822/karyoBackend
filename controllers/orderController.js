@@ -90,10 +90,10 @@ export const createOrder = async (req, res) => {
     // COD-specific validations
     if (paymentMethod === "cod") {
       // Check if COD is available for the order amount
-      if (total > 5000) {
+      if (total > 50000) {
         return res.status(400).json({
           message:
-            "Cash on Delivery is not available for orders above ₹5,000. Please use online payment.",
+            "Cash on Delivery is not available for orders above ₹50,000. Please use online payment.",
         });
       }
 
@@ -418,7 +418,7 @@ export const checkCODAvailability = async (req, res) => {
     ];
 
     const isLocationRestricted = codRestrictedStates.includes(state);
-    const isAmountRestricted = total > 5000;
+    const isAmountRestricted = total > 50000;
 
     const isAvailable = !isLocationRestricted && !isAmountRestricted;
 
@@ -429,7 +429,7 @@ export const checkCODAvailability = async (req, res) => {
           ? "COD not available in your location"
           : null,
         amount: isAmountRestricted
-          ? "COD not available for orders above ₹5,000"
+          ? "COD not available for orders above ₹50,000"
           : null,
       },
       message: isAvailable
