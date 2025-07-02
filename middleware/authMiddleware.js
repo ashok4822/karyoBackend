@@ -22,9 +22,14 @@ export const verifyToken = async function (req, res, next) {
     return res.status(401).json({ message: `No token, authorization denied` });
   }
 
-  const decoded = jwt.decode(accessToken);
+  const decoded = verifyAccessToken(accessToken);
+  if (!decoded) return res.status(401).json({ message: "Invalid token" });
   const userId = decoded.userId;
   req.user = decoded;
+
+  // const decoded = jwt.decode(accessToken);
+  // const userId = decoded.userId;
+  // req.user = decoded;
 
   if (!userId) {
     return res
@@ -37,7 +42,6 @@ export const verifyToken = async function (req, res, next) {
     if (!user) {
       return res.status(401).json({ message: "User not found" });
     }
-   
 
     const isValidToken = verifyAccessToken(accessToken);
 

@@ -68,12 +68,10 @@ export const registerUser = async function (req, res) {
         sameSite: isProduction ? "Strict" : "Lax",
         path: "/",
       });
-      res
-        .status(201)
-        .json({
-          user: { id: savedUserData.id, role: savedUserData.role },
-          token: accessToken,
-        });
+      res.status(200).json({
+        user: { id: savedUserData.id, role: savedUserData.role },
+        token: accessToken,
+      });
     }
   } catch (error) {
     res
@@ -96,12 +94,10 @@ export const loginUser = async function (req, res) {
     }
 
     if (user.isDeleted) {
-      return res
-        .status(403)
-        .json({
-          message:
-            "Your account has been blocked by the admin. Please contact support.",
-        });
+      return res.status(403).json({
+        message:
+          "Your account has been blocked by the admin. Please contact support.",
+      });
     }
 
     if (user.role === "admin") {
@@ -130,7 +126,7 @@ export const loginUser = async function (req, res) {
     });
 
     res
-      .status(201)
+      .status(200)
       .json({ user: { id: user.id, role: user.role }, token: accessToken });
   } catch (error) {
     res
@@ -198,7 +194,7 @@ export const verifyOtp = async (req, res) => {
     path: "/",
   });
   res
-    .status(201)
+    .status(200)
     .json({ user: { id: user.id, role: user.role }, token: accessToken });
 };
 
