@@ -288,7 +288,15 @@ export const getOrderByIdForAdmin = async (req, res) => {
     const shipping = {
       status: order.status || '-',
     };
-    res.json({ order: { ...order.toObject(), payment, shipping } });
+    // Preserve original fields for backend compatibility
+    const orderData = {
+      ...order.toObject(),
+      payment,
+      shipping,
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentStatus
+    };
+    res.json({ order: orderData });
   } catch (error) {
     console.error("Error getting order (admin):", error);
     res.status(500).json({ message: `Internal Server Error: ${error.message}` });
@@ -540,14 +548,115 @@ export const verifyReturnRequest = async (req, res) => {
     if (!order) {
       return res.status(404).json({ message: 'Order not found.' });
     }
+    
     if (order.status !== 'returned') {
       return res.status(400).json({ message: 'Only orders with status "returned" can be verified.' });
     }
+    
+    // Check if order is eligible for refund
+    // For online payments: both 'paid' and 'pending' status are eligible
+    // For COD payments: all statuses are eligible since payment was made in cash
+    const isEligibleForRefund = (
+      (order.paymentMethod === 'online' && (order.paymentStatus === 'paid' || order.paymentStatus === 'pending')) ||
+      (order.paymentMethod === 'cod')
+    );
+    
+    if (isEligibleForRefund) {
+      // Import Wallet model
+      const Wallet = mongoose.model('Wallet');
+      
+      // Find or create user's wallet
+      let wallet = await Wallet.findOne({ user: order.user });
+      if (!wallet) {
+        wallet = await Wallet.create({ user: order.user });
+      }
+      
+      // Add refund amount to wallet
+      wallet.balance += order.total;
+      wallet.transactions.push({
+        type: 'credit',
+        amount: order.total,
+        description: `Refund for order ${order.orderNumber} (${order.paymentMethod.toUpperCase()}) - Return verified by admin`
+      });
+      await wallet.save();
+      
+      // Update order payment status to refunded
+      order.paymentStatus = 'refunded';
+    }
+    
     order.status = 'return_verified';
-    // Optionally, log admin who verified: order.returnVerifiedBy = req.user.userId;
+    order.returnVerifiedBy = req.user.userId;
+    order.returnVerifiedAt = new Date();
     await order.save();
-    res.json({ message: 'Return request verified successfully.', order });
+    
+    res.json({ 
+      message: 'Return request verified successfully.', 
+      order,
+      refundProcessed: order.paymentStatus === 'refunded'
+    });
   } catch (error) {
+    console.error('Error in verifyReturnRequest:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Reject return request
+export const rejectReturnRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found.' });
+    }
+    
+    if (order.status !== 'returned') {
+      return res.status(400).json({ message: 'Only orders with status "returned" can be rejected.' });
+    }
+    
+    order.status = 'rejected';
+    order.returnVerifiedBy = req.user.userId;
+    order.returnVerifiedAt = new Date();
+    order.cancellationReason = reason || 'Return request rejected by admin';
+    
+    await order.save();
+    
+    res.json({ 
+      message: 'Return request rejected successfully.', 
+      order
+    });
+  } catch (error) {
+    console.error('Error in rejectReturnRequest:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Verify return request without refund
+export const verifyReturnWithoutRefund = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found.' });
+    }
+    
+    if (order.status !== 'returned') {
+      return res.status(400).json({ message: 'Only orders with status "returned" can be verified.' });
+    }
+    
+    order.status = 'return_verified';
+    order.returnVerifiedBy = req.user.userId;
+    order.returnVerifiedAt = new Date();
+    await order.save();
+    
+    res.json({ 
+      message: 'Return request verified successfully without refund.', 
+      order,
+      refundProcessed: false
+    });
+  } catch (error) {
+    console.error('Error in verifyReturnWithoutRefund:', error);
     res.status(500).json({ message: error.message });
   }
 };

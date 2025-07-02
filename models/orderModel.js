@@ -126,7 +126,7 @@ const orderSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "returned", "return_verified"],
+    enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "returned", "return_verified", "rejected"],
     default: "pending",
   },
   orderNumber: {
@@ -143,6 +143,13 @@ const orderSchema = new mongoose.Schema({
   cancellationReason: {
     type: String,
     default: "",
+  },
+  returnVerifiedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  },
+  returnVerifiedAt: {
+    type: Date,
   },
 });
 
