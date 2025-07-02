@@ -254,7 +254,7 @@ export const removeFromCart = async (req, res) => {
 // Clear cart
 export const clearCart = async (req, res) => {
   try {
-    console.log("clearCart called, user:", req.user);
+    // console.log("clearCart called, user:", req.user);
     const userId = req.user.userId;
 
     // Use findOneAndUpdate for atomic update
@@ -263,10 +263,10 @@ export const clearCart = async (req, res) => {
       { $set: { items: [] } },
       { new: true }
     );
-    console.log("Cart found and cleared:", cart);
+    // console.log("Cart found and cleared:", cart);
 
     if (!cart) {
-      console.log("No cart found for user:", userId);
+      // console.log("No cart found for user:", userId);
       return res.status(404).json({ error: "Cart not found" });
     }
 

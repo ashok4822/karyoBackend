@@ -15,7 +15,7 @@ function generateOtp() {
 
 export const registerUser = async function (req, res) {
   const { username, email, password } = req.body;
-  console.log(username, email, password);
+  // console.log(username, email, password);
 
   const errors = validationResult(req);
 
@@ -84,11 +84,11 @@ export const registerUser = async function (req, res) {
 
 export const loginUser = async function (req, res) {
   const { email, password } = req.body;
-  console.log(req.body);
+  // console.log(req.body);
 
   try {
-    console.log(email);
-    console.log(password);
+    // console.log(email);
+    // console.log(password);
     const user = await User.findOne({ email });
 
     if (!user) {
@@ -266,35 +266,35 @@ export const refreshToken = async (req, res) => {
   try {
     const token = req.cookies["refreshToken"];
     if (!token) {
-      console.log("[refreshToken] No refresh token cookie found");
+      // console.log("[refreshToken] No refresh token cookie found");
       return res.status(401).json({ message: "No refresh token" });
     }
     let payload;
     try {
       payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET);
     } catch (err) {
-      console.log("[refreshToken] JWT verification failed:", err.message);
+      // console.log("[refreshToken] JWT verification failed:", err.message);
       return res.status(401).json({ message: "Invalid refresh token" });
     }
     const user = await User.findById(payload.userId);
     if (!user) {
-      console.log("[refreshToken] No user found for userId:", payload.userId);
+      // console.log("[refreshToken] No user found for userId:", payload.userId);
       return res.status(401).json({ message: "Invalid refresh token" });
     }
     if (user.refreshToken !== token) {
-      console.log(
-        "[refreshToken] Token mismatch. User's stored token:",
-        user.refreshToken,
-        "Cookie token:",
-        token
-      );
+      // console.log(
+      //   "[refreshToken] Token mismatch. User's stored token:",
+      //   user.refreshToken,
+      //   "Cookie token:",
+      //   token
+      // );
       return res.status(401).json({ message: "Invalid refresh token" });
     }
     const newAccessToken = generateAccessToken(user);
-    console.log("[refreshToken] Success for user:", user.email);
+    // console.log("[refreshToken] Success for user:", user.email);
     res.json({ token: newAccessToken });
   } catch (error) {
-    console.log("[refreshToken] Internal server error:", error.message);
+    // console.log("[refreshToken] Internal server error:", error.message);
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });

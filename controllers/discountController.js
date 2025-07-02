@@ -368,7 +368,7 @@ export const getActiveDiscounts = async (req, res) => {
 export const getUserEligibleDiscounts = async (req, res) => {
   try {
     const userId = req.user.userId;
-    console.log("--------backend user in discount: ", userId);
+    // console.log("--------backend user in discount: ", userId);
     const now = new Date();
 
     // Get all active and valid discounts

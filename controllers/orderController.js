@@ -5,7 +5,7 @@ import mongoose from "mongoose";
 
 // Create a new order
 export const createOrder = async (req, res) => {
-  console.log("createOrder called", req.body, req.user);
+  // console.log("createOrder called", req.body, req.user);
   try {
     const {
       items,
@@ -68,7 +68,7 @@ export const createOrder = async (req, res) => {
       }
 
       // Check per-user usage limit
-      console.log("userId:", req.user.userId);
+      // console.log("userId:", req.user.userId);
       const userUsage = await UserDiscountUsage.getOrCreate(
         req.user.userId,
         discount.discountId
@@ -183,8 +183,8 @@ export const createOrder = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error creating order:", error);
-    if (error.stack) console.error(error.stack);
+    // console.error("Error creating order:", error);
+    if (error.stack) // console.error(error.stack);
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
@@ -224,7 +224,7 @@ export const getUserOrders = async (req, res) => {
       totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    console.error("Error getting user orders:", error);
+    // console.error("Error getting user orders:", error);
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
@@ -252,7 +252,7 @@ export const getOrderById = async (req, res) => {
 
     res.json({ order });
   } catch (error) {
-    console.error("Error getting order:", error);
+    // console.error("Error getting order:", error);
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
@@ -298,7 +298,7 @@ export const getOrderByIdForAdmin = async (req, res) => {
     };
     res.json({ order: orderData });
   } catch (error) {
-    console.error("Error getting order (admin):", error);
+    // console.error("Error getting order (admin):", error);
     res.status(500).json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -389,7 +389,7 @@ export const cancelOrder = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error cancelling order:", error);
+    // console.error("Error cancelling order:", error);
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
@@ -437,7 +437,7 @@ export const checkCODAvailability = async (req, res) => {
         : "Cash on Delivery is not available for your order",
     });
   } catch (error) {
-    console.error("Error checking COD availability:", error);
+    // console.error("Error checking COD availability:", error);
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
@@ -480,7 +480,7 @@ export const getAllOrders = async (req, res) => {
       totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    console.error("Error getting all orders:", error);
+    // console.error("Error getting all orders:", error);
     res.status(500).json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -595,7 +595,7 @@ export const verifyReturnRequest = async (req, res) => {
       refundProcessed: order.paymentStatus === 'refunded'
     });
   } catch (error) {
-    console.error('Error in verifyReturnRequest:', error);
+    // console.error('Error in verifyReturnRequest:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -627,7 +627,7 @@ export const rejectReturnRequest = async (req, res) => {
       order
     });
   } catch (error) {
-    console.error('Error in rejectReturnRequest:', error);
+    // console.error('Error in rejectReturnRequest:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -656,7 +656,7 @@ export const verifyReturnWithoutRefund = async (req, res) => {
       refundProcessed: false
     });
   } catch (error) {
-    console.error('Error in verifyReturnWithoutRefund:', error);
+    // console.error('Error in verifyReturnWithoutRefund:', error);
     res.status(500).json({ message: error.message });
   }
 };

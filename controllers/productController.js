@@ -1335,13 +1335,7 @@ export const getPublicProducts = async (req, res) => {
       return res.status(400).json({ message: 'Invalid search input.' });
     }
     
-    // Debug: Log raw query parameters
-    console.log('Raw query parameters:', req.query);
-    console.log('variantColour type:', typeof variantColour, 'value:', variantColour);
-    console.log('variantCapacity type:', typeof variantCapacity, 'value:', variantCapacity);
-    console.log('category type:', typeof category, 'value:', category);
-    
-    console.log('Public products filter parameters:', { search, category, brand, variantColour, variantCapacity, minPrice, maxPrice, sort });
+    // console.log('Public products filter parameters:', { search, category, brand, variantColour, variantCapacity, minPrice, maxPrice, sort });
     
     const query = { isDeleted: false, status: { $in: ['active', 'inactive'] } };
     
@@ -1354,7 +1348,7 @@ export const getPublicProducts = async (req, res) => {
     }
     // Handle category filtering - support multiple categories
     if (category && category !== '') {
-      console.log('Processing category filter:', category);
+      // console.log('Processing category filter:', category);
       if (Array.isArray(category)) {
         // Multiple categories selected - use $in operator
         const categoryIds = category.map(cat => {
@@ -1363,7 +1357,7 @@ export const getPublicProducts = async (req, res) => {
           }
           return cat;
         });
-        console.log('Multiple categories - converted to ObjectIds:', categoryIds);
+        // console.log('Multiple categories - converted to ObjectIds:', categoryIds);
         query.category = { $in: categoryIds };
       } else if (typeof category === 'string') {
         // Single category - check if it's comma-separated
@@ -1374,15 +1368,15 @@ export const getPublicProducts = async (req, res) => {
             }
             return cat.trim();
           });
-          console.log('Comma-separated categories - converted to ObjectIds:', categoryIds);
+          // console.log('Comma-separated categories - converted to ObjectIds:', categoryIds);
           query.category = { $in: categoryIds };
         } else {
           // Single category value
           if (mongoose.Types.ObjectId.isValid(category)) {
-            console.log('Single category - converted to ObjectId:', category);
+            // console.log('Single category - converted to ObjectId:', category);
             query.category = new mongoose.Types.ObjectId(category);
           } else {
-            console.log('Single category - using as string:', category);
+            // console.log('Single category - using as string:', category);
             query.category = category;
           }
         }
@@ -1390,27 +1384,27 @@ export const getPublicProducts = async (req, res) => {
     }
     // Handle brand filtering - support multiple brands
     if (brand && brand !== '') {
-      console.log('Processing brand filter:', brand);
+      // console.log('Processing brand filter:', brand);
       if (Array.isArray(brand)) {
         // Multiple brands selected - use $in operator
         const brandRegexes = brand.map(b => new RegExp(b, 'i'));
-        console.log('Multiple brands - converted to regexes:', brandRegexes);
+        // console.log('Multiple brands - converted to regexes:', brandRegexes);
         query.brand = { $in: brandRegexes };
       } else if (typeof brand === 'string') {
         // Single brand - check if it's comma-separated
         if (brand.includes(',')) {
           const brandRegexes = brand.split(',').map(b => new RegExp(b.trim(), 'i'));
-          console.log('Comma-separated brands - converted to regexes:', brandRegexes);
+          // console.log('Comma-separated brands - converted to regexes:', brandRegexes);
           query.brand = { $in: brandRegexes };
         } else {
           // Single brand value
-          console.log('Single brand - using regex:', brand);
+          // console.log('Single brand - using regex:', brand);
           query.brand = { $regex: brand, $options: 'i' };
         }
       }
     }
     
-    console.log('Public products base query:', query);
+    // console.log('Public products base query:', query);
     
     // Build aggregation pipeline
     let pipeline = [
@@ -1480,7 +1474,7 @@ export const getPublicProducts = async (req, res) => {
     }
     
     if (colours.length > 0) {
-      console.log('Processing colours:', colours);
+      // console.log('Processing colours:', colours);
       variantFilters.push({
         'variantDetails': {
           $elemMatch: {
@@ -1502,7 +1496,7 @@ export const getPublicProducts = async (req, res) => {
     }
     
     if (capacities.length > 0) {
-      console.log('Processing capacities:', capacities);
+      // console.log('Processing capacities:', capacities);
       variantFilters.push({
         'variantDetails': {
           $elemMatch: {
@@ -1514,7 +1508,7 @@ export const getPublicProducts = async (req, res) => {
     
     // Add variant filters to pipeline
     if (variantFilters.length > 0) {
-      console.log('Adding variant filters to pipeline:', variantFilters);
+      // console.log('Adding variant filters to pipeline:', variantFilters);
       pipeline.push({ $match: { $and: variantFilters } });
     }
 
@@ -1626,7 +1620,7 @@ export const getPublicProducts = async (req, res) => {
     }
     
     if (countVariantFilters.length > 0) {
-      console.log('Adding variant filters to count pipeline:', countVariantFilters);
+      // console.log('Adding variant filters to count pipeline:', countVariantFilters);
       countPipeline.push({ $match: { $and: countVariantFilters } });
     }
 
@@ -1636,10 +1630,6 @@ export const getPublicProducts = async (req, res) => {
       Product.aggregate(pipeline),
       Product.aggregate(countPipeline)
     ]);
-
-    console.log('Public products found:', products.length);
-    console.log('Public products total result:', totalResult);
-    console.log('Product IDs being returned:', products.map(p => p._id));
 
     const total = totalResult.length > 0 ? totalResult[0].total : 0;
 
@@ -1655,15 +1645,15 @@ export const getPublicProductById = async (req, res) => {
   try {
     const { id } = req.params;
     
-    console.log('getPublicProductById called with ID:', id);
+    // console.log('getPublicProductById called with ID:', id);
     
     // Validate product ID format
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      console.log('Invalid product ID format:', id);
+      // console.log('Invalid product ID format:', id);
       return res.status(400).json({ message: 'Invalid product ID format' });
     }
 
-    console.log('Looking for product with ID:', id);
+    // console.log('Looking for product with ID:', id);
     
     // Use aggregation pipeline to populate variantDetails like ProductListing
     const pipeline = [
@@ -1721,25 +1711,25 @@ export const getPublicProductById = async (req, res) => {
     const products = await Product.aggregate(pipeline);
     const product = products[0];
 
-    console.log('Product found:', product ? 'Yes' : 'No');
+    // console.log('Product found:', product ? 'Yes' : 'No');
     if (product) {
-      console.log('Product details:', {
-        _id: product._id,
-        name: product.name,
-        status: product.status,
-        isDeleted: product.isDeleted,
-        variantDetailsLength: product.variantDetails?.length
-      });
+      // console.log('Product details:', {
+      //   _id: product._id,
+      //   name: product.name,
+      //   status: product.status,
+      //   isDeleted: product.isDeleted,
+      //   variantDetailsLength: product.variantDetails?.length
+      // });
     }
 
     if (!product) {
-      console.log('Product not found in database');
+      // console.log('Product not found in database');
       return res.status(404).json({ message: 'Product not found' });
     }
 
     // Check if product is deleted, blocked, or unavailable
     if (product.isDeleted || product.status !== 'active') {
-      console.log('Product is not available:', { isDeleted: product.isDeleted, status: product.status });
+      // console.log('Product is not available:', { isDeleted: product.isDeleted, status: product.status });
       return res.status(404).json({ message: 'Product not available' });
     }
 
@@ -1776,18 +1766,18 @@ export const getPublicProductById = async (req, res) => {
       unavailable: false
     };
 
-    console.log('Sending product data to frontend');
-    console.log('Product variantDetails being sent:', {
-      variantDetailsLength: product.variantDetails?.length,
-      variantDetails: product.variantDetails?.map(v => ({
-        _id: v._id,
-        colour: v.colour,
-        capacity: v.capacity,
-        price: v.price,
-        stock: v.stock,
-        status: v.status
-      }))
-    });
+    // console.log('Sending product data to frontend');
+    // console.log('Product variantDetails being sent:', {
+    //   variantDetailsLength: product.variantDetails?.length,
+    //   variantDetails: product.variantDetails?.map(v => ({
+    //     _id: v._id,
+    //     colour: v.colour,
+    //     capacity: v.capacity,
+    //     price: v.price,
+    //     stock: v.stock,
+    //     status: v.status
+    //   }))
+    // });
     res.json(productData);
   } catch (error) {
     console.error('Error getting public product by ID:', error);

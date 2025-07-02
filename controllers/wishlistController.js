@@ -40,8 +40,6 @@ export const getWishlist = async (req, res) => {
       })
     );
 
-    console.log("wishlist items: ", itemsWithImage);
-
     res.json(itemsWithImage);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch wishlist" });

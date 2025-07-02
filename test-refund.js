@@ -48,7 +48,7 @@ async function testRefund() {
       
       // Find or create user's wallet
       if (!wallet) {
-        console.log('Creating new wallet for user:', order.user);
+        // console.log('Creating new wallet for user:', order.user);
         wallet = await Wallet.create({ user: order.user });
       }
       
