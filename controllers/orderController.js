@@ -195,13 +195,24 @@ export const createOrder = async (req, res) => {
 export const getUserOrders = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    // Always enforce a maximum of 5 orders per page
+    const limit = 5;
     const status = req.query.status; // optional filter
+    const search = req.query.search; // new search parameter
 
     const query = { user: req.user.userId };
 
     if (status && status !== "all") {
       query.status = status;
+    }
+
+    // Add search filter for orderNumber or recipientName (case-insensitive, partial match)
+    if (search && search.trim() !== "") {
+      const searchRegex = new RegExp(search.trim(), "i");
+      query.$or = [
+        { orderNumber: searchRegex },
+        { "shippingAddress.recipientName": searchRegex }
+      ];
     }
 
     const total = await Order.countDocuments(query);
