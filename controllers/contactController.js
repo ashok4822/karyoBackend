@@ -28,7 +28,7 @@ export const submitContactForm = async (req, res) => {
       <p><strong>Email:</strong> ${email}</p>
       <p><strong>Subject:</strong> ${subject}</p>
       <p><strong>Message:</strong></p>
-      <p>${message.replace(/\n/g, '<br>')}</p>
+      <p>${message.replace(/\n/g, "<br>")}</p>
       <hr>
       <p><small>This message was sent from the CARYO contact form.</small></p>
     `;
@@ -46,7 +46,7 @@ export const submitContactForm = async (req, res) => {
       <p>Dear ${name},</p>
       <p>We have received your message and will get back to you as soon as possible.</p>
       <p><strong>Your message:</strong></p>
-      <p>${message.replace(/\n/g, '<br>')}</p>
+      <p>${message.replace(/\n/g, "<br>")}</p>
       <hr>
       <p>Best regards,<br>The CARYO Team</p>
     `;
@@ -68,4 +68,4 @@ export const submitContactForm = async (req, res) => {
       message: "Failed to send message. Please try again later.",
     });
   }
-}; 
+};
