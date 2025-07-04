@@ -50,13 +50,26 @@ export const updateProfile = async function (req, res) {
     const userId = req.user.userId;
     const { firstName, lastName, mobileNo, address } = req.body;
 
+    // Validation
+    if (!firstName || typeof firstName !== "string" || !/^[A-Za-z]{2,30}$/.test(firstName.trim())) {
+      return res.status(400).json({ message: "First name is required and must be 2-30 letters." });
+    }
+    if (!lastName || typeof lastName !== "string" || !/^[A-Za-z]{2,30}$/.test(lastName.trim())) {
+      return res.status(400).json({ message: "Last name is required and must be 2-30 letters." });
+    }
+    if (!mobileNo || typeof mobileNo !== "string" || !/^\d{10}$/.test(mobileNo.trim())) {
+      return res.status(400).json({ message: "Mobile number is required and must be 10 digits." });
+    }
+    if (!address || typeof address !== "string" || address.trim().length < 5 || address.trim().length > 100) {
+      return res.status(400).json({ message: "Address is required and must be 5-100 characters." });
+    }
+
     // If mobile number is being updated, check for uniqueness
     if (mobileNo) {
       const existingUser = await User.findOne({
         mobileNo: mobileNo,
         _id: { $ne: userId },
       });
-
       if (existingUser) {
         return res.status(400).json({
           message: `Mobile number is already registered with another account`,
@@ -68,9 +81,7 @@ export const updateProfile = async function (req, res) {
     if (firstName !== undefined) updateData.firstName = firstName;
     if (lastName !== undefined) updateData.lastName = lastName;
     if (mobileNo !== undefined) {
-      // If mobileNo is empty string, set it to undefined to avoid null values
-      updateData.mobileNo =
-        mobileNo.trim() === "" ? undefined : mobileNo.trim();
+      updateData.mobileNo = mobileNo.trim();
     }
     if (address !== undefined) updateData.address = address;
 

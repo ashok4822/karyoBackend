@@ -127,7 +127,10 @@ export const loginUser = async function (req, res) {
 
     res
       .status(200)
-      .json({ user: { id: user.id, role: user.role, username:user.username }, token: accessToken });
+      .json({
+        user: { id: user.id, role: user.role, username: user.username },
+        token: accessToken,
+      });
   } catch (error) {
     res
       .status(500)
@@ -288,7 +291,6 @@ export const refreshToken = async (req, res) => {
     }
     const newAccessToken = generateAccessToken(user);
     // console.log("[refreshToken] Success for user:", user.email);
-    console.log("(backend)newAccessToken: ", newAccessToken);
     res.json({ token: newAccessToken });
   } catch (error) {
     // console.log("[refreshToken] Internal server error:", error.message);
