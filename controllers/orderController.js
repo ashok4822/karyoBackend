@@ -461,14 +461,44 @@ export const getAllOrders = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const status = req.query.status; // optional filter
+    const search = req.query.search; // new search parameter
+    const date = req.query.date; // new date filter
 
     const query = {};
     if (status && status !== "all") {
       query.status = status;
     }
 
-    const total = await Order.countDocuments(query);
-    const orders = await Order.find(query)
+    // Date filter (expects YYYY-MM-DD)
+    if (date) {
+      const start = new Date(date);
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+      start.setHours(0, 0, 0, 0);
+      query.createdAt = { $gte: start, $lte: end };
+    }
+
+    // If search is provided, build $or for orderNumber and user fields
+    let userMatch = {};
+    if (search && search.trim() !== "") {
+      const searchRegex = new RegExp(search.trim(), "i");
+      query.$or = [
+        { orderNumber: searchRegex },
+      ];
+      // We'll filter by user fields after population
+      userMatch = {
+        $or: [
+          { "user.firstName": searchRegex },
+          { "user.lastName": searchRegex },
+          { "user.username": searchRegex },
+          { "user.email": searchRegex },
+        ],
+      };
+    }
+
+    // Count total (with search)
+    let total;
+    let ordersQuery = Order.find(query)
       .populate({
         path: "user",
         select: "username firstName lastName email",
@@ -483,6 +513,35 @@ export const getAllOrders = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
+
+    let orders = await ordersQuery;
+
+    // If searching by user fields, filter in-memory after population
+    if (search && search.trim() !== "") {
+      orders = orders.filter(order => {
+        // Check orderNumber match (already in query, but keep for safety)
+        if (order.orderNumber && order.orderNumber.match(new RegExp(search.trim(), "i"))) {
+          return true;
+        }
+        // Check user fields
+        if (order.user) {
+          const { firstName, lastName, username, email } = order.user;
+          return (
+            (firstName && firstName.match(new RegExp(search.trim(), "i"))) ||
+            (lastName && lastName.match(new RegExp(search.trim(), "i"))) ||
+            (username && username.match(new RegExp(search.trim(), "i"))) ||
+            (email && email.match(new RegExp(search.trim(), "i")))
+          );
+        }
+        return false;
+      });
+      // For pagination, get total count with same filter
+      total = orders.length;
+      // Paginate filtered results
+      orders = orders.slice(0, limit);
+    } else {
+      total = await Order.countDocuments(query);
+    }
 
     res.json({
       orders,
