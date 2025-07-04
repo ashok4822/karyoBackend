@@ -127,7 +127,7 @@ export const loginUser = async function (req, res) {
 
     res
       .status(200)
-      .json({ user: { id: user.id, role: user.role }, token: accessToken });
+      .json({ user: { id: user.id, role: user.role, username:user.username }, token: accessToken });
   } catch (error) {
     res
       .status(500)

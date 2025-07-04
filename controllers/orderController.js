@@ -513,6 +513,42 @@ export const updateOrderStatus = async (req, res) => {
   }
 };
 
+// Update payment status
+export const updatePaymentStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { paymentStatus } = req.body;
+    
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+    
+    // Validate payment status
+    const validPaymentStatuses = ["pending", "paid", "failed", "refunded"];
+    if (!validPaymentStatuses.includes(paymentStatus)) {
+      return res.status(400).json({ message: "Invalid payment status" });
+    }
+    
+    // Only allow payment status updates for COD orders
+    if (order.paymentMethod !== "cod") {
+      return res.status(400).json({ 
+        message: "Payment status can only be updated for COD orders" 
+      });
+    }
+    
+    order.paymentStatus = paymentStatus;
+    await order.save();
+    
+    res.json({ 
+      message: "Payment status updated successfully", 
+      order 
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Delete order
 export const deleteOrder = async (req, res) => {
   try {
