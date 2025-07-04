@@ -49,13 +49,14 @@ export const verifyToken = async function (req, res, next) {
       const isRefreshTokenVerified = verifyRefreshToken(user.refreshToken);
 
       if (isRefreshTokenVerified) {
-        const accessToken = generateAccessToken(user);
+        // const accessToken = generateAccessToken(user);
         const refreshToken = generateRefreshToken(user);
 
         await User.findByIdAndUpdate(
           { _id: userId },
           { $set: { refreshToken } }
         );
+        // return res.status(401).json({ accessToken});
       } else {
         throw new Error(`verificaion failed`);
       }

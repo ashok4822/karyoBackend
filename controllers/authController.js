@@ -288,6 +288,7 @@ export const refreshToken = async (req, res) => {
     }
     const newAccessToken = generateAccessToken(user);
     // console.log("[refreshToken] Success for user:", user.email);
+    console.log("(backend)newAccessToken: ", newAccessToken);
     res.json({ token: newAccessToken });
   } catch (error) {
     // console.log("[refreshToken] Internal server error:", error.message);

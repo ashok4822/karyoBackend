@@ -133,7 +133,7 @@ export const blockUnblockUser = async function (req, res) {
 
 export const adminRefreshToken = async (req, res) => {
   try {
-    const token = req.cookies["refreshToken"];
+    const token = req.cookies["adminRefreshToken"];
     if (!token) return res.status(401).json({ message: "No refresh token" });
     let payload;
     try {
