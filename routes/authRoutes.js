@@ -38,7 +38,7 @@ router.get(
 router.get(
   "/google/callback",
   passport.authenticate("google", {
-    failureRedirect: "/login",
+    failureRedirect: "http://localhost:8080/login",
     session: false,
   }),
   (req, res) => {

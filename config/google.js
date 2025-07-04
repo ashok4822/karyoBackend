@@ -10,6 +10,10 @@ passport.use(new GoogleStrategy({
   try {
     const email = profile.emails[0].value;
     let user = await User.findOne({ email });
+    if (user && user.isDeleted) {
+      // Prevent deleted (blocked) users from logging in
+      return done(null, false, { message: "Your account has been blocked. Please contact support." });
+    }
     if (!user) {
       let baseUsername = profile.displayName.replace(/\s+/g, '').toLowerCase();
       let username = baseUsername;
