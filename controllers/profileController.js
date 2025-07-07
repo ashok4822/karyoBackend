@@ -195,6 +195,33 @@ export const createShippingAddress = async (req, res) => {
       isDefault,
     } = req.body;
 
+    // Backend validation
+    const errors = {};
+    if (!recipientName || typeof recipientName !== 'string' || recipientName.trim().length < 2 || recipientName.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(recipientName.trim())) {
+      errors.recipientName = 'Recipient name is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+    }
+    if (!addressLine1 || typeof addressLine1 !== 'string' || addressLine1.trim().length < 5 || addressLine1.trim().length > 100) {
+      errors.addressLine1 = 'Address Line 1 is required and must be 5-100 characters.';
+    }
+    if (!city || typeof city !== 'string' || city.trim().length < 2 || city.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(city.trim())) {
+      errors.city = 'City is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+    }
+    if (!state || typeof state !== 'string' || state.trim().length < 2 || state.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(state.trim())) {
+      errors.state = 'State is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+    }
+    if (!postalCode || typeof postalCode !== 'string' || postalCode.trim().length < 4 || postalCode.trim().length > 10 || !/^\d{4,10}$/.test(postalCode.trim())) {
+      errors.postalCode = 'Postal code is required and must be 4-10 digits.';
+    }
+    if (!country || typeof country !== 'string' || country.trim().length < 2 || country.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(country.trim())) {
+      errors.country = 'Country is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+    }
+    if (!phoneNumber || typeof phoneNumber !== 'string' || !/^\d{10,15}$/.test(phoneNumber.trim())) {
+      errors.phoneNumber = 'Phone number is required and must be 10-15 digits.';
+    }
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({ message: 'Validation failed', errors });
+    }
+
     // If isDefault is true, unset previous default
     if (isDefault) {
       await ShippingAddress.updateMany({ user: userId, isDefault: true }, { $set: { isDefault: false } });
@@ -259,6 +286,33 @@ export const updateShippingAddress = async (req, res) => {
       phoneNumber,
       isDefault,
     } = req.body;
+
+    // Backend validation
+    const errors = {};
+    if (!recipientName || typeof recipientName !== 'string' || recipientName.trim().length < 2 || recipientName.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(recipientName.trim())) {
+      errors.recipientName = 'Recipient name is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+    }
+    if (!addressLine1 || typeof addressLine1 !== 'string' || addressLine1.trim().length < 5 || addressLine1.trim().length > 100) {
+      errors.addressLine1 = 'Address Line 1 is required and must be 5-100 characters.';
+    }
+    if (!city || typeof city !== 'string' || city.trim().length < 2 || city.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(city.trim())) {
+      errors.city = 'City is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+    }
+    if (!state || typeof state !== 'string' || state.trim().length < 2 || state.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(state.trim())) {
+      errors.state = 'State is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+    }
+    if (!postalCode || typeof postalCode !== 'string' || postalCode.trim().length < 4 || postalCode.trim().length > 10 || !/^\d{4,10}$/.test(postalCode.trim())) {
+      errors.postalCode = 'Postal code is required and must be 4-10 digits.';
+    }
+    if (!country || typeof country !== 'string' || country.trim().length < 2 || country.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(country.trim())) {
+      errors.country = 'Country is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+    }
+    if (!phoneNumber || typeof phoneNumber !== 'string' || !/^\d{10,15}$/.test(phoneNumber.trim())) {
+      errors.phoneNumber = 'Phone number is required and must be 10-15 digits.';
+    }
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({ message: 'Validation failed', errors });
+    }
 
     // Check if address belongs to user
     const existingAddress = await ShippingAddress.findOne({ _id: addressId, user: userId });
