@@ -9,6 +9,9 @@ import { OTP_EXPIRY_SECONDS } from "../config/constants.js";
 import jwt from "jsonwebtoken";
 dotenv.config();
 
+const PASSWORD_RESET_TOKEN_SECRET = process.env.PASSWORD_RESET_TOKEN_SECRET || "reset_secret";
+const PASSWORD_RESET_TOKEN_EXPIRY = "3m"; // 3 minutes
+
 function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -208,14 +211,17 @@ export const requestPasswordResetOtp = async (req, res) => {
   if (!user) return res.status(400).json({ message: "User not found" });
   const otp = generateOtp();
   await Otp.deleteMany({ email });
-  await Otp.create({ email, otp });
+  const otpDoc = await Otp.create({ email, otp });
   await transporter.sendMail({
     from: process.env.EMAIL_USER,
     to: email,
     subject: "Your Password Reset OTP Code",
     text: `Your OTP code is: ${otp}`,
   });
-  res.json({ message: "OTP sent to email" });
+  res.json({ 
+    message: "OTP sent to email",
+    expiresAt: new Date(otpDoc.createdAt).getTime() + OTP_EXPIRY_SECONDS * 1000 // ms timestamp
+  });
 };
 
 export const verifyPasswordResetOtp = async (req, res) => {
@@ -234,30 +240,29 @@ export const verifyPasswordResetOtp = async (req, res) => {
       .status(400)
       .json({ message: "OTP expired. Please request a new one." });
   }
-  res.status(200).json({ message: "OTP verified" });
+  // Generate a password reset token (JWT)
+  const resetToken = jwt.sign({ email }, PASSWORD_RESET_TOKEN_SECRET, { expiresIn: PASSWORD_RESET_TOKEN_EXPIRY });
+  await Otp.deleteMany({ email }); // Invalidate OTP after successful verification
+  res.status(200).json({ message: "OTP verified", resetToken });
 };
 
 export const resetPassword = async (req, res) => {
-  const { email, otp, newPassword } = req.body;
-  if (!email || !otp || !newPassword)
+  const { email, newPassword, resetToken } = req.body;
+  if (!email || !newPassword || !resetToken)
     return res.status(400).json({ message: "All fields required" });
-  const otpDoc = await Otp.findOne({ email, otp });
-  if (!otpDoc)
-    return res.status(400).json({ message: "Invalid or expired OTP" });
-  if (
-    Date.now() - new Date(otpDoc.createdAt).getTime() >
-    OTP_EXPIRY_SECONDS * 1000
-  ) {
-    await Otp.deleteMany({ email });
-    return res
-      .status(400)
-      .json({ message: "OTP expired. Please request a new one." });
+  // Verify the reset token
+  try {
+    const payload = jwt.verify(resetToken, PASSWORD_RESET_TOKEN_SECRET);
+    if (payload.email !== email) {
+      return res.status(400).json({ message: "Invalid reset token" });
+    }
+  } catch (err) {
+    return res.status(400).json({ message: "Reset token expired or invalid. Please request a new OTP." });
   }
   const user = await User.findOne({ email });
   if (!user) return res.status(400).json({ message: "User not found" });
   user.password = await bcrypt.hash(newPassword, 10);
   await user.save();
-  await Otp.deleteMany({ email });
   res.status(200).json({ message: "Password reset successful" });
 };
 
