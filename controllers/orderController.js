@@ -458,14 +458,19 @@ export const checkCODAvailability = async (req, res) => {
 // Get all orders (admin)
 export const getAllOrders = async (req, res) => {
   try {
+    // console.log('getAllOrders req.query:', req.query); // Debug log removed
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const status = req.query.status; // optional filter
     const search = req.query.search; // new search parameter
     const date = req.query.date; // new date filter
+    const sortBy = req.query.sortBy || 'createdAt'; // sorting field
+    const sortOrder = req.query.sortOrder || 'desc'; // sorting direction
 
     const query = {};
-    if (status && status !== "all") {
+    if (status === 'returned') {
+      query.status = { $in: ['returned', 'return_verified'] };
+    } else if (status && status !== "all") {
       query.status = status;
     }
 
@@ -498,6 +503,10 @@ export const getAllOrders = async (req, res) => {
 
     // Count total (with search)
     let total;
+    // Build sort object
+    const sortObject = {};
+    sortObject[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    
     let ordersQuery = Order.find(query)
       .populate({
         path: "user",
@@ -510,7 +519,7 @@ export const getAllOrders = async (req, res) => {
           select: "name brand",
         },
       })
-      .sort({ createdAt: -1 })
+      .sort(sortObject)
       .skip((page - 1) * limit)
       .limit(limit);
 
