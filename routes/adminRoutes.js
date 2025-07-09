@@ -44,7 +44,7 @@ import { verifyAdmin } from "../middleware/authMiddleware.js";
 import fs from "fs";
 import path from "path";
 import { getDashboard } from "../controllers/adminDashboard.js";
-import { getAllOrders, getOrderByIdForAdmin, updateOrderStatus, updatePaymentStatus, deleteOrder, verifyReturnRequest, rejectReturnRequest, verifyReturnWithoutRefund } from "../controllers/orderController.js";
+import { getAllOrders, getOrderByIdForAdmin, updateOrderStatus, updatePaymentStatus, deleteOrder, verifyReturnRequest, rejectReturnRequest, verifyReturnWithoutRefund, updateOrderItemStatus } from "../controllers/orderController.js";
 
 const router = express.Router();
 
@@ -206,5 +206,7 @@ router.delete("/orders/:id", verifyToken, isAdmin, deleteOrder);
 router.put("/orders/:id/verify-return", verifyToken, isAdmin, verifyReturnRequest);
 router.put("/orders/:id/verify-return-no-refund", verifyToken, isAdmin, verifyReturnWithoutRefund);
 router.put("/orders/:id/reject-return", verifyToken, isAdmin, rejectReturnRequest);
+// Per-item status update
+router.put("/orders/:orderId/items/:itemId/status", verifyToken, isAdmin, updateOrderItemStatus);
 
 export default router;

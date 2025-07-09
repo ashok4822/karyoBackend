@@ -635,19 +635,28 @@ export const deleteOrder = async (req, res) => {
 export const returnOrder = async (req, res) => {
   try {
     const { id } = req.params;
-    const { reason } = req.body;
-    if (!reason || !reason.trim()) {
-      return res.status(400).json({ message: 'Reason for return is required.' });
+    const { items } = req.body; // [{ productVariantId, reason }]
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: 'No items specified for return.' });
     }
     const order = await Order.findById(id);
     if (!order) {
       return res.status(404).json({ message: 'Order not found.' });
     }
-    if (order.status !== 'delivered') {
-      return res.status(400).json({ message: 'Only delivered orders can be returned.' });
+    // Remove order.status check; allow per-item return if itemStatus === 'delivered'
+    let anyReturned = false;
+    for (const reqItem of items) {
+      const item = order.items.find(i => i.productVariantId.toString() === reqItem.productVariantId);
+      if (item && !item.returned && item.itemStatus === 'delivered') {
+        item.returned = true;
+        item.returnReason = reqItem.reason || '';
+        anyReturned = true;
+      }
+    }
+    if (!anyReturned) {
+      return res.status(400).json({ message: 'No valid items to return. Only delivered, non-returned items can be returned.' });
     }
     order.status = 'returned';
-    order.cancellationReason = reason;
     await order.save();
     res.json({ message: 'Order return requested successfully.', order });
   } catch (error) {
@@ -663,51 +672,47 @@ export const verifyReturnRequest = async (req, res) => {
     if (!order) {
       return res.status(404).json({ message: 'Order not found.' });
     }
-    
     if (order.status !== 'returned') {
       return res.status(400).json({ message: 'Only orders with status "returned" can be verified.' });
     }
-    
     // Check if order is eligible for refund
-    // For online payments: both 'paid' and 'pending' status are eligible
-    // For COD payments: all statuses are eligible since payment was made in cash
     const isEligibleForRefund = (
       (order.paymentMethod === 'online' && (order.paymentStatus === 'paid' || order.paymentStatus === 'pending')) ||
       (order.paymentMethod === 'cod')
     );
-    
-    if (isEligibleForRefund) {
+    let refundAmount = 0;
+    // Calculate refund as sum of returned items only
+    refundAmount = order.items
+      .filter(item => item.returned)
+      .reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    if (isEligibleForRefund && refundAmount > 0) {
       // Import Wallet model
       const Wallet = mongoose.model('Wallet');
-      
       // Find or create user's wallet
       let wallet = await Wallet.findOne({ user: order.user });
       if (!wallet) {
         wallet = await Wallet.create({ user: order.user });
       }
-      
       // Add refund amount to wallet
-      wallet.balance += order.total;
+      wallet.balance += refundAmount;
       wallet.transactions.push({
         type: 'credit',
-        amount: order.total,
-        description: `Refund for order ${order.orderNumber} (${order.paymentMethod.toUpperCase()}) - Return verified by admin`
+        amount: refundAmount,
+        description: `Refund for order ${order.orderNumber} (${order.paymentMethod.toUpperCase()}) - Return verified by admin (partial refund)`
       });
       await wallet.save();
-      
       // Update order payment status to refunded
       order.paymentStatus = 'refunded';
     }
-    
     order.status = 'return_verified';
     order.returnVerifiedBy = req.user.userId;
     order.returnVerifiedAt = new Date();
     await order.save();
-    
     res.json({ 
       message: 'Return request verified successfully.', 
       order,
-      refundProcessed: order.paymentStatus === 'refunded'
+      refundProcessed: order.paymentStatus === 'refunded',
+      refundAmount
     });
   } catch (error) {
     // console.error('Error in verifyReturnRequest:', error);
@@ -772,6 +777,72 @@ export const verifyReturnWithoutRefund = async (req, res) => {
     });
   } catch (error) {
     // console.error('Error in verifyReturnWithoutRefund:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Add per-item status update controller
+export const updateOrderItemStatus = async (req, res) => {
+  try {
+    const { orderId, itemId } = req.params;
+    const { status, paymentStatus } = req.body;
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found.' });
+    }
+    const item = order.items.id(itemId);
+    if (!item) {
+      return res.status(404).json({ message: 'Order item not found.' });
+    }
+    // Only update fields that are present in the request
+    if (typeof status !== 'undefined') {
+      item.itemStatus = status;
+    }
+    if (typeof paymentStatus !== 'undefined') {
+      // Wallet refund for COD per-item refund
+      if (
+        paymentStatus === 'refunded' &&
+        item.itemPaymentStatus !== 'refunded' &&
+        order.paymentMethod === 'cod'
+      ) {
+        // Import Wallet model
+        const Wallet = mongoose.model('Wallet');
+        // Find or create user's wallet
+        let wallet = await Wallet.findOne({ user: order.user });
+        if (!wallet) {
+          wallet = await Wallet.create({ user: order.user });
+        }
+        // Calculate refund amount for this item
+        let refundAmount = item.price * item.quantity;
+        // Deduct proportional discount if any
+        if (order.discount && order.discount.discountAmount > 0) {
+          // Calculate total of all non-cancelled items
+          const totalNonCancelled = order.items
+            .filter(i => !i.cancelled)
+            .reduce((sum, i) => sum + (i.price * i.quantity), 0);
+          // Proportional discount for this item
+          const itemDiscount = (refundAmount / totalNonCancelled) * order.discount.discountAmount;
+          refundAmount = Math.max(0, refundAmount - itemDiscount);
+        }
+        wallet.balance += refundAmount;
+        wallet.transactions.push({
+          type: 'credit',
+          amount: refundAmount,
+          description: `Refund for item in order ${order.orderNumber} (COD) - Refunded by admin`
+        });
+        await wallet.save();
+      }
+      item.itemPaymentStatus = paymentStatus;
+    }
+
+    // If all items are delivered, set order.status = 'delivered'
+    if (order.items.length > 0 && order.items.every(i => i.itemStatus === 'delivered')) {
+      order.status = 'delivered';
+    }
+
+    await order.save();
+    res.json({ message: 'Order item status/payment status updated', order });
+  } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
