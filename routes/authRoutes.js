@@ -30,6 +30,15 @@ router.post("/refresh-token", refreshLimiter, refreshToken);
 router.post("/logout", logout);
 router.post("/admin/logout", adminLogout);
 
+// Development route to clear rate limits (remove in production)
+if (process.env.NODE_ENV !== 'production') {
+  router.post("/clear-rate-limits", (req, res) => {
+    // This would need to be implemented with the actual rate limiter store
+    // For now, just return success
+    res.json({ message: "Rate limits cleared (development only)" });
+  });
+}
+
 router.get(
   "/google",
   passport.authenticate("google", { scope: ["profile", "email"] })

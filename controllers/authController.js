@@ -269,36 +269,38 @@ export const resetPassword = async (req, res) => {
 export const refreshToken = async (req, res) => {
   try {
     const token = req.cookies["refreshToken"];
+    console.log("[refreshToken] Starting refresh process");
+    
     if (!token) {
-      // console.log("[refreshToken] No refresh token cookie found");
+      console.log("[refreshToken] No refresh token cookie found");
       return res.status(401).json({ message: "No refresh token" });
     }
+    
     let payload;
     try {
       payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET);
+      console.log("[refreshToken] JWT verification successful for user:", payload.userId);
     } catch (err) {
-      // console.log("[refreshToken] JWT verification failed:", err.message);
+      console.log("[refreshToken] JWT verification failed:", err.message);
       return res.status(401).json({ message: "Invalid refresh token" });
     }
+    
     const user = await User.findById(payload.userId);
     if (!user) {
-      // console.log("[refreshToken] No user found for userId:", payload.userId);
+      console.log("[refreshToken] No user found for userId:", payload.userId);
       return res.status(401).json({ message: "Invalid refresh token" });
     }
+    
     if (user.refreshToken !== token) {
-      // console.log(
-      //   "[refreshToken] Token mismatch. User's stored token:",
-      //   user.refreshToken,
-      //   "Cookie token:",
-      //   token
-      // );
+      console.log("[refreshToken] Token mismatch. User's stored token:", user.refreshToken ? "exists" : "missing", "Cookie token:", token ? "exists" : "missing");
       return res.status(401).json({ message: "Invalid refresh token" });
     }
+    
     const newAccessToken = generateAccessToken(user);
-    // console.log("[refreshToken] Success for user:", user.email);
+    console.log("[refreshToken] Success for user:", user.email);
     res.json({ token: newAccessToken });
   } catch (error) {
-    // console.log("[refreshToken] Internal server error:", error.message);
+    console.log("[refreshToken] Internal server error:", error.message);
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });

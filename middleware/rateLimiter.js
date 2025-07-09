@@ -12,10 +12,10 @@ export const loginLimiter = rateLimit({
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 });
 
-// Limit refresh token calls: max 120 per hour per user (fallback to IP)
+// Limit refresh token calls: max 500 per hour per user (increased for development)
 export const refreshLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 120, // 120 per hour
+  max: 500, // 500 per hour (increased from 120)
   keyGenerator: (req) => {
     try {
       const token = req.cookies["refreshToken"];

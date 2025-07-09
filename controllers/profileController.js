@@ -120,13 +120,17 @@ export const updateProfile = async function (req, res) {
 export const getProfile = async function (req, res) {
   try {
     const userId = req.user.userId;
+    console.log("[getProfile] Request from user:", userId);
+    
     const user = await User.findById(userId).select("-password -refreshToken");
     // console.log(user);
 
     if (!user) {
+      console.log("[getProfile] User not found:", userId);
       return res.status(404).json({ message: `User not found` });
     }
 
+    console.log("[getProfile] Profile retrieved successfully for:", user.email);
     res.status(200).json({
       user: {
         id: user._id,
@@ -143,6 +147,7 @@ export const getProfile = async function (req, res) {
       },
     });
   } catch (error) {
+    console.log("[getProfile] Error:", error.message);
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });

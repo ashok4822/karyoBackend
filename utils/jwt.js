@@ -7,7 +7,7 @@ const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET;
 
 export const generateAccessToken = function (user) {
   const payload = { userId: user._id, role: user.role };
-  return jwt.sign(payload, accessTokenSecret, { expiresIn: "5m" });
+  return jwt.sign(payload, accessTokenSecret, { expiresIn: "15m" });
 };
 
 export const generateRefreshToken = function (user) {

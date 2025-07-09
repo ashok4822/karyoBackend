@@ -22,49 +22,35 @@ export const verifyToken = async function (req, res, next) {
     return res.status(401).json({ message: `No token, authorization denied` });
   }
 
-  const decoded = verifyAccessToken(accessToken);
-  if (!decoded) return res.status(401).json({ message: "Invalid token" });
-  const userId = decoded.userId;
-  req.user = decoded;
-
-  // const decoded = jwt.decode(accessToken);
-  // const userId = decoded.userId;
-  // req.user = decoded;
-
-  if (!userId) {
-    return res
-      .status(401)
-      .json({ message: `Invalid token, authorization denied` });
-  }
-
   try {
+    // Verify the access token
+    const decoded = verifyAccessToken(accessToken);
+    if (!decoded) {
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
+
+    const userId = decoded.userId;
+    if (!userId) {
+      return res.status(401).json({ message: `Invalid token, authorization denied` });
+    }
+
+    // Find the user
     const user = await User.findOne({ _id: userId });
     if (!user) {
       return res.status(401).json({ message: "User not found" });
     }
 
-    const isValidToken = verifyAccessToken(accessToken);
-
-    if (!isValidToken) {
-      const isRefreshTokenVerified = verifyRefreshToken(user.refreshToken);
-
-      if (isRefreshTokenVerified) {
-        // const accessToken = generateAccessToken(user);
-        const refreshToken = generateRefreshToken(user);
-
-        await User.findByIdAndUpdate(
-          { _id: userId },
-          { $set: { refreshToken } }
-        );
-        // return res.status(401).json({ accessToken});
-      } else {
-        throw new Error(`verificaion failed`);
-      }
+    // Check if user is deleted
+    if (user.isDeleted) {
+      return res.status(401).json({ message: "User account has been deleted" });
     }
+
+    // Attach user info to request
+    req.user = decoded;
     next();
   } catch (error) {
-    console.error(`Can't find out the user`);
-    return res.status(401).json({ message: "User validation failed" });
+    console.error(`Token verification error:`, error.message);
+    return res.status(401).json({ message: "Token verification failed" });
   }
 };
 
