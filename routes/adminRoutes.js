@@ -136,9 +136,9 @@ const handleMulterError = (error, req, res, next) => {
 };
 
 router.post("/login", adminLogin);
-router.get("/getUsers", getUsers);
-router.get("/dashboard", getDashboard);
-router.get("/users", getUsersPaginated); //verifyToken, isAdmin,
+router.get("/getUsers", verifyAdmin, getUsers);
+router.get("/dashboard", verifyAdmin, getDashboard);
+router.get("/users", verifyAdmin, getUsersPaginated);
 router.patch("/users/:id/block", verifyToken, isAdmin, blockUnblockUser);
 router.post("/logout", adminLogout);
 router.get("/categories", verifyToken, isAdmin, listCategories);
@@ -153,7 +153,7 @@ router.post(
   handleMulterError,
   addProduct
 );
-router.get("/products", listProducts);
+router.get("/products", verifyAdmin, listProducts);
 router.get("/products/variant-options", verifyAdmin, getVariantOptions);
 router.get("/products/brand-options", verifyAdmin, getBrandOptions);
 router.get("/products/:id", verifyAdmin, getProductById);
@@ -189,13 +189,13 @@ router.post("/refresh-token", adminRefreshToken);
 // Discount routes
 router.get("/discounts", verifyToken, isAdmin, listDiscounts);
 router.post("/discounts", verifyToken, isAdmin, addDiscount);
-router.get("/discounts/active/all", getActiveDiscounts);
+router.get("/discounts/active/all", verifyAdmin, getActiveDiscounts);
 router.get("/discounts/usage-stats", verifyToken, isAdmin, getAllDiscountUsageStats);
 router.get("/discounts/:id", verifyToken, isAdmin, getDiscountById);
 router.put("/discounts/:id", verifyToken, isAdmin, editDiscount);
 router.delete("/discounts/:id", verifyToken, isAdmin, deleteDiscount);
 router.patch("/discounts/:id/restore", verifyToken, isAdmin, restoreDiscount);
-router.patch("/discounts/:id/usage", updateDiscountUsage);
+router.patch("/discounts/:id/usage", verifyAdmin, updateDiscountUsage);
 router.get("/discounts/:discountId/user-usage", verifyToken, isAdmin, getUserDiscountUsage);
 
 router.get("/orders", verifyToken, isAdmin, getAllOrders);
