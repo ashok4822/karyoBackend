@@ -45,6 +45,7 @@ import fs from "fs";
 import path from "path";
 import { getDashboard } from "../controllers/adminDashboard.js";
 import { getAllOrders, getOrderByIdForAdmin, updateOrderStatus, updatePaymentStatus, deleteOrder, verifyReturnRequest, rejectReturnRequest, verifyReturnWithoutRefund, updateOrderItemStatus } from "../controllers/orderController.js";
+import { listCoupons, addCoupon, editCoupon, deleteCoupon, restoreCoupon } from "../controllers/couponController.js";
 
 const router = express.Router();
 
@@ -208,5 +209,12 @@ router.put("/orders/:id/verify-return-no-refund", verifyToken, isAdmin, verifyRe
 router.put("/orders/:id/reject-return", verifyToken, isAdmin, rejectReturnRequest);
 // Per-item status update
 router.put("/orders/:orderId/items/:itemId/status", verifyToken, isAdmin, updateOrderItemStatus);
+
+// Coupon routes
+router.get("/coupons", verifyToken, isAdmin, listCoupons);
+router.post("/coupons", verifyToken, isAdmin, addCoupon);
+router.put("/coupons/:id", verifyToken, isAdmin, editCoupon);
+router.delete("/coupons/:id", verifyToken, isAdmin, deleteCoupon);
+router.patch("/coupons/:id/restore", verifyToken, isAdmin, restoreCoupon);
 
 export default router;

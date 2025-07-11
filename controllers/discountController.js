@@ -127,6 +127,17 @@ export const addDiscount = async (req, res) => {
       });
     }
 
+    // Check if coupon code already exists (excluding deleted ones)
+    const existingCode = await Discount.findOne({
+      code: req.body.code?.trim().toUpperCase(),
+      isDeleted: false,
+    });
+    if (existingCode) {
+      return res.status(400).json({
+        message: "Coupon code already exists. Please use a unique code.",
+      });
+    }
+
     // Create new discount
     const discount = new Discount({
       name,
@@ -242,6 +253,19 @@ export const editDiscount = async (req, res) => {
       if (existingDiscount) {
         return res.status(400).json({
           message: "Discount with this name already exists",
+        });
+      }
+    }
+
+    if (req.body.code && req.body.code.trim().toUpperCase() !== discount.code) {
+      const existingCode = await Discount.findOne({
+        code: req.body.code.trim().toUpperCase(),
+        _id: { $ne: id },
+        isDeleted: false,
+      });
+      if (existingCode) {
+        return res.status(400).json({
+          message: "Coupon code already exists. Please use a unique code.",
         });
       }
     }
@@ -589,5 +613,45 @@ export const getAllDiscountUsageStats = async (req, res) => {
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
+// Validate coupon code for checkout
+export const validateCouponCode = async (req, res) => {
+  try {
+    const { code, orderAmount } = req.body;
+    const userId = req.user.userId;
+    if (!code) {
+      return res.status(400).json({ message: "Coupon code is required" });
+    }
+    const now = new Date();
+    const discount = await Discount.findOne({
+      code: code.trim().toUpperCase(),
+      status: "active",
+      validFrom: { $lte: now },
+      validTo: { $gte: now },
+      isDeleted: false,
+    });
+    if (!discount) {
+      return res.status(404).json({ message: "Invalid or expired coupon code" });
+    }
+    // Check minimum order amount
+    if (discount.minimumAmount > 0 && orderAmount < discount.minimumAmount) {
+      return res.status(400).json({ message: `Minimum order amount of ₹${discount.minimumAmount} required for this coupon` });
+    }
+    // Check global usage limit
+    if (discount.maxUsage && discount.usageCount >= discount.maxUsage) {
+      return res.status(400).json({ message: "Coupon usage limit reached" });
+    }
+    // Check per-user usage limit
+    const userUsage = await UserDiscountUsage.findOne({ user: userId, discount: discount._id });
+    if (discount.maxUsagePerUser && userUsage && userUsage.usageCount >= discount.maxUsagePerUser) {
+      return res.status(400).json({ message: "You have reached your personal usage limit for this coupon" });
+    }
+    // All checks passed, return discount details
+    res.json({ discount });
+  } catch (error) {
+    console.error("Error validating coupon code:", error);
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
   }
 };

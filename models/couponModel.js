@@ -1,11 +1,6 @@
 import mongoose from "mongoose";
 
-const discountSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-  },
+const couponSchema = new mongoose.Schema({
   code: {
     type: String,
     required: true,
@@ -75,19 +70,16 @@ const discountSchema = new mongoose.Schema({
   },
 });
 
-// Index for better query performance
-discountSchema.index({ status: 1, validFrom: 1, validTo: 1 });
-discountSchema.index({ name: 1 });
-discountSchema.index({ isDeleted: 1 });
+couponSchema.index({ status: 1, validFrom: 1, validTo: 1 });
+couponSchema.index({ code: 1 });
+couponSchema.index({ isDeleted: 1 });
 
-// Pre-save middleware to update the updatedAt field
-discountSchema.pre("save", function (next) {
+couponSchema.pre("save", function (next) {
   this.updatedAt = new Date();
   next();
 });
 
-// Virtual for checking if discount is currently valid
-discountSchema.virtual("isValid").get(function () {
+couponSchema.virtual("isValid").get(function () {
   const now = new Date();
   return (
     this.status === "active" &&
@@ -98,37 +90,28 @@ discountSchema.virtual("isValid").get(function () {
   );
 });
 
-// Method to check if discount can be applied
-discountSchema.methods.canBeApplied = function (orderAmount) {
+couponSchema.methods.canBeApplied = function (orderAmount) {
   if (!this.isValid) return false;
   if (this.minimumAmount > 0 && orderAmount < this.minimumAmount) return false;
   return true;
 };
 
-// Method to calculate discount amount
-discountSchema.methods.calculateDiscount = function (orderAmount) {
+couponSchema.methods.calculateDiscount = function (orderAmount) {
   if (!this.canBeApplied(orderAmount)) return 0;
-
   let discountAmount = 0;
-  
   if (this.discountType === "percentage") {
     discountAmount = (orderAmount * this.discountValue) / 100;
   } else {
     discountAmount = this.discountValue;
   }
-
-  // Apply maximum discount limit if set
   if (this.maximumDiscount && discountAmount > this.maximumDiscount) {
     discountAmount = this.maximumDiscount;
   }
-
-  // Ensure discount doesn't exceed order amount
   if (discountAmount > orderAmount) {
     discountAmount = orderAmount;
   }
-
-  return Math.round(discountAmount * 100) / 100; // Round to 2 decimal places
+  return Math.round(discountAmount * 100) / 100;
 };
 
-const Discount = mongoose.model("Discount", discountSchema);
-export default Discount; 
+const Coupon = mongoose.model("Coupon", couponSchema);
+export default Coupon; 
