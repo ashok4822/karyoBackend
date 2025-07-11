@@ -625,29 +625,71 @@ export const validateCouponCode = async (req, res) => {
       return res.status(400).json({ message: "Coupon code is required" });
     }
     const now = new Date();
-    const discount = await Discount.findOne({
+    
+    // First check in Discount model
+    let discount = await Discount.findOne({
       code: code.trim().toUpperCase(),
       status: "active",
       validFrom: { $lte: now },
       validTo: { $gte: now },
       isDeleted: false,
     });
+    
+    // If not found in Discount model, check in Coupon model
+    if (!discount) {
+      const Coupon = (await import("../models/couponModel.js")).default;
+      const coupon = await Coupon.findOne({
+        code: code.trim().toUpperCase(),
+        status: "active",
+        validFrom: { $lte: now },
+        validTo: { $gte: now },
+        isDeleted: false,
+      });
+      
+      if (coupon) {
+        // Convert coupon to discount format for consistency
+        discount = {
+          _id: coupon._id,
+          name: coupon.description || coupon.code,
+          code: coupon.code,
+          description: coupon.description,
+          discountType: coupon.discountType,
+          discountValue: coupon.discountValue,
+          minimumAmount: coupon.minimumAmount,
+          maximumDiscount: coupon.maximumDiscount,
+          validFrom: coupon.validFrom,
+          validTo: coupon.validTo,
+          status: coupon.status,
+          usageCount: coupon.usageCount,
+          maxUsage: coupon.maxUsage,
+          maxUsagePerUser: coupon.maxUsagePerUser,
+          isDeleted: coupon.isDeleted,
+          createdAt: coupon.createdAt,
+          updatedAt: coupon.updatedAt,
+        };
+      }
+    }
+    
     if (!discount) {
       return res.status(404).json({ message: "Invalid or expired coupon code" });
     }
+    
     // Check minimum order amount
     if (discount.minimumAmount > 0 && orderAmount < discount.minimumAmount) {
       return res.status(400).json({ message: `Minimum order amount of ₹${discount.minimumAmount} required for this coupon` });
     }
+    
     // Check global usage limit
     if (discount.maxUsage && discount.usageCount >= discount.maxUsage) {
       return res.status(400).json({ message: "Coupon usage limit reached" });
     }
+    
     // Check per-user usage limit
     const userUsage = await UserDiscountUsage.findOne({ user: userId, discount: discount._id });
     if (discount.maxUsagePerUser && userUsage && userUsage.usageCount >= discount.maxUsagePerUser) {
       return res.status(400).json({ message: "You have reached your personal usage limit for this coupon" });
     }
+    
     // All checks passed, return discount details
     res.json({ discount });
   } catch (error) {

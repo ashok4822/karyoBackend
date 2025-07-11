@@ -37,7 +37,39 @@ export const createOrder = async (req, res) => {
 
     // Validate discount if provided
     if (discount && discount.discountId) {
-      const discountDoc = await Discount.findById(discount.discountId);
+      // First check in Discount model
+      let discountDoc = await Discount.findById(discount.discountId);
+      
+      // If not found in Discount model, check in Coupon model
+      if (!discountDoc) {
+        const Coupon = (await import("../models/couponModel.js")).default;
+        const couponDoc = await Coupon.findById(discount.discountId);
+        
+        if (couponDoc) {
+          // Convert coupon to discount format for consistency
+          discountDoc = {
+            _id: couponDoc._id,
+            name: couponDoc.description || couponDoc.code,
+            code: couponDoc.code,
+            description: couponDoc.description,
+            discountType: couponDoc.discountType,
+            discountValue: couponDoc.discountValue,
+            minimumAmount: couponDoc.minimumAmount,
+            maximumDiscount: couponDoc.maximumDiscount,
+            validFrom: couponDoc.validFrom,
+            validTo: couponDoc.validTo,
+            status: couponDoc.status,
+            usageCount: couponDoc.usageCount,
+            maxUsage: couponDoc.maxUsage,
+            maxUsagePerUser: couponDoc.maxUsagePerUser,
+            isDeleted: couponDoc.isDeleted,
+            isValid: couponDoc.isValid,
+            canBeApplied: couponDoc.canBeApplied,
+            calculateDiscount: couponDoc.calculateDiscount,
+          };
+        }
+      }
+      
       if (!discountDoc) {
         return res.status(400).json({ message: "Invalid discount" });
       }
@@ -68,7 +100,6 @@ export const createOrder = async (req, res) => {
       }
 
       // Check per-user usage limit
-      // console.log("userId:", req.user.userId);
       const userUsage = await UserDiscountUsage.getOrCreate(
         req.user.userId,
         discount.discountId
@@ -79,9 +110,20 @@ export const createOrder = async (req, res) => {
         });
       }
 
-      // Update global discount usage count
-      discountDoc.usageCount += 1;
-      await discountDoc.save();
+      // Update global discount/coupon usage count
+      if (discountDoc.usageCount !== undefined) {
+        discountDoc.usageCount += 1;
+        // Check if it's a Coupon model instance or a plain object
+        if (discountDoc.save) {
+          await discountDoc.save();
+        } else {
+          // If it's a plain object (from Coupon model), update directly
+          const Coupon = (await import("../models/couponModel.js")).default;
+          await Coupon.findByIdAndUpdate(discount.discountId, {
+            $inc: { usageCount: 1 }
+          });
+        }
+      }
 
       // Update user-specific usage count
       await userUsage.incrementUsage();
@@ -206,27 +248,49 @@ export const getUserOrders = async (req, res) => {
       query.status = status;
     }
 
-    // Add search filter for orderNumber or recipientName (case-insensitive, partial match)
-    if (search && search.trim() !== "") {
-      const searchRegex = new RegExp(search.trim(), "i");
-      query.$or = [
-        { orderNumber: searchRegex },
-        { "shippingAddress.recipientName": searchRegex }
-      ];
-    }
-
-    const total = await Order.countDocuments(query);
-    const orders = await Order.find(query)
+    // First, get all orders for the user with basic filters
+    let allOrders = await Order.find(query)
       .populate({
         path: "items.productVariantId",
         populate: {
           path: "product",
-          select: "name brand",
+          select: "name brand mainImage",
         },
       })
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit);
+      .sort({ createdAt: -1 });
+
+    // Apply search filter if provided
+    if (search && search.trim() !== "") {
+      const searchTerm = search.trim().toLowerCase();
+      allOrders = allOrders.filter(order => {
+        // Check orderNumber
+        if (order.orderNumber && order.orderNumber.toLowerCase().includes(searchTerm)) {
+          return true;
+        }
+        
+        // Check recipientName
+        if (order.shippingAddress && order.shippingAddress.recipientName && 
+            order.shippingAddress.recipientName.toLowerCase().includes(searchTerm)) {
+          return true;
+        }
+        
+        // Check product names
+        if (order.items && order.items.length > 0) {
+          return order.items.some(item => {
+            const product = item.productVariantId?.product;
+            return product && product.name && product.name.toLowerCase().includes(searchTerm);
+          });
+        }
+        
+        return false;
+      });
+    }
+
+    // Calculate total and paginate
+    const total = allOrders.length;
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const orders = allOrders.slice(startIndex, endIndex);
 
     res.json({
       orders,
@@ -235,7 +299,7 @@ export const getUserOrders = async (req, res) => {
       totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    // console.error("Error getting user orders:", error);
+    console.error("Error getting user orders:", error);
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
@@ -283,7 +347,7 @@ export const getOrderByIdForAdmin = async (req, res) => {
         path: "items.productVariantId",
         populate: {
           path: "product",
-          select: "name brand",
+          select: "name brand mainImage",
         },
       });
     if (!order) {
@@ -458,7 +522,7 @@ export const checkCODAvailability = async (req, res) => {
 // Get all orders (admin)
 export const getAllOrders = async (req, res) => {
   try {
-    // console.log('getAllOrders req.query:', req.query); // Debug log removed
+    console.log('getAllOrders req.query:', req.query);
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const status = req.query.status; // optional filter
@@ -483,22 +547,11 @@ export const getAllOrders = async (req, res) => {
       query.createdAt = { $gte: start, $lte: end };
     }
 
-    // If search is provided, build $or for orderNumber and user fields
-    let userMatch = {};
-    if (search && search.trim() !== "") {
-      const searchRegex = new RegExp(search.trim(), "i");
-      query.$or = [
-        { orderNumber: searchRegex },
-      ];
-      // We'll filter by user fields after population
-      userMatch = {
-        $or: [
-          { "user.firstName": searchRegex },
-          { "user.lastName": searchRegex },
-          { "user.username": searchRegex },
-          { "user.email": searchRegex },
-        ],
-      };
+    // We'll do all search filtering in memory after population
+    // This allows us to search across order numbers, customer names, and product names
+    const searchTerm = search && search.trim() !== "" ? search.trim() : null;
+    if (searchTerm) {
+      console.log('Search term:', searchTerm);
     }
 
     // Count total (with search)
@@ -506,6 +559,9 @@ export const getAllOrders = async (req, res) => {
     // Build sort object
     const sortObject = {};
     sortObject[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    
+    console.log('Order query:', JSON.stringify(query, null, 2));
+    console.log('Sort object:', JSON.stringify(sortObject, null, 2));
     
     let ordersQuery = Order.find(query)
       .populate({
@@ -516,7 +572,7 @@ export const getAllOrders = async (req, res) => {
         path: "items.productVariantId",
         populate: {
           path: "product",
-          select: "name brand",
+          select: "name brand mainImage",
         },
       })
       .sort(sortObject)
@@ -524,30 +580,91 @@ export const getAllOrders = async (req, res) => {
       .limit(limit);
 
     let orders = await ordersQuery;
+    
+    // Debug: Check total orders in database
+    const totalOrdersInDB = await Order.countDocuments({});
+    console.log('Total orders in database:', totalOrdersInDB);
 
-    // If searching by user fields, filter in-memory after population
-    if (search && search.trim() !== "") {
-      orders = orders.filter(order => {
-        // Check orderNumber match (already in query, but keep for safety)
-        if (order.orderNumber && order.orderNumber.match(new RegExp(search.trim(), "i"))) {
+    // If searching, we need to fetch all orders and filter them
+    if (searchTerm) {
+      console.log('Searching for:', searchTerm);
+      
+      // Fetch all orders without pagination for search
+      const allOrdersQuery = Order.find(query)
+        .populate({
+          path: "user",
+          select: "username firstName lastName email",
+        })
+        .populate({
+          path: "items.productVariantId",
+          populate: {
+            path: "product",
+            select: "name brand mainImage",
+          },
+        })
+        .sort(sortObject);
+      
+      const allOrders = await allOrdersQuery;
+      console.log('Total orders fetched for search:', allOrders.length);
+      
+      if (allOrders.length > 0) {
+        console.log('Sample order structure:', JSON.stringify(allOrders[0], null, 2));
+      }
+      
+      // Filter all orders
+      const filteredOrders = allOrders.filter(order => {
+        const term = searchTerm.toLowerCase();
+        
+        // Check orderNumber match
+        if (order.orderNumber && order.orderNumber.toLowerCase().includes(term)) {
+          console.log('Match found by orderNumber:', order.orderNumber);
           return true;
         }
+        
         // Check user fields
         if (order.user) {
           const { firstName, lastName, username, email } = order.user;
-          return (
-            (firstName && firstName.match(new RegExp(search.trim(), "i"))) ||
-            (lastName && lastName.match(new RegExp(search.trim(), "i"))) ||
-            (username && username.match(new RegExp(search.trim(), "i"))) ||
-            (email && email.match(new RegExp(search.trim(), "i")))
-          );
+          const fullName = `${firstName || ""} ${lastName || ""}`.trim().toLowerCase();
+          if (
+            (firstName && firstName.toLowerCase().includes(term)) ||
+            (lastName && lastName.toLowerCase().includes(term)) ||
+            (fullName && fullName.includes(term)) ||
+            (username && username.toLowerCase().includes(term)) ||
+            (email && email.toLowerCase().includes(term))
+          ) {
+            console.log('Match found by user:', fullName, email);
+            return true;
+          }
         }
+        
+        // Check product names
+        if (order.items && order.items.length > 0) {
+          const productMatch = order.items.some(item => {
+            const product = item.productVariantId?.product;
+            if (product && product.name) {
+              const matches = product.name.toLowerCase().includes(term);
+              if (matches) {
+                console.log('Match found by product:', product.name);
+              }
+              return matches;
+            }
+            return false;
+          });
+          if (productMatch) return true;
+        }
+        
         return false;
       });
-      // For pagination, get total count with same filter
-      total = orders.length;
-      // Paginate filtered results
-      orders = orders.slice(0, limit);
+      
+      console.log('Total orders after filter:', filteredOrders.length);
+      
+      // Calculate pagination for filtered results
+      total = filteredOrders.length;
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      orders = filteredOrders.slice(startIndex, endIndex);
+      
+      console.log(`Showing orders ${startIndex + 1} to ${Math.min(endIndex, total)} of ${total}`);
     } else {
       total = await Order.countDocuments(query);
     }

@@ -71,7 +71,6 @@ const couponSchema = new mongoose.Schema({
 });
 
 couponSchema.index({ status: 1, validFrom: 1, validTo: 1 });
-couponSchema.index({ code: 1 });
 couponSchema.index({ isDeleted: 1 });
 
 couponSchema.pre("save", function (next) {
