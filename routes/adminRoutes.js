@@ -52,7 +52,10 @@ import {
   getOfferById, 
   updateOffer as editOffer, 
   deleteOffer, 
-  toggleOfferStatus 
+  toggleOfferStatus,
+  getBestOfferForProduct,
+  getOffersByCategory,
+  getOffersByProducts
 } from "../controllers/offerController.js";
 import { 
   getAllReferrals as listReferrals 
@@ -228,13 +231,21 @@ router.put("/coupons/:id", verifyToken, isAdmin, editCoupon);
 router.delete("/coupons/:id", verifyToken, isAdmin, deleteCoupon);
 router.patch("/coupons/:id/restore", verifyToken, isAdmin, restoreCoupon);
 
+// Test route
+router.get("/test", (req, res) => {
+  res.json({ message: "Admin routes are working" });
+});
+
 // Offer routes
-router.get("/api/offers", verifyToken, isAdmin, listOffers);
-router.post("/api/offers", verifyToken, isAdmin, addOffer);
-router.get("/api/offers/:id", verifyToken, isAdmin, getOfferById);
-router.put("/api/offers/:id", verifyToken, isAdmin, editOffer);
-router.delete("/api/offers/:id", verifyToken, isAdmin, deleteOffer);
-router.patch("/api/offers/:id/status", verifyToken, isAdmin, toggleOfferStatus);
+router.get("/offers", verifyToken, isAdmin, listOffers);
+router.post("/offers", verifyToken, isAdmin, addOffer);
+router.get("/offers/product/:productId", verifyToken, isAdmin, getBestOfferForProduct);
+router.get("/offers/category/:categoryId", verifyToken, isAdmin, getOffersByCategory);
+router.post("/offers/products", verifyToken, isAdmin, getOffersByProducts);
+router.patch("/offers/:id/status", verifyToken, isAdmin, toggleOfferStatus);
+router.get("/offers/:id", verifyToken, isAdmin, getOfferById);
+router.put("/offers/:id", verifyToken, isAdmin, editOffer);
+router.delete("/offers/:id", verifyToken, isAdmin, deleteOffer);
 
 // Referral routes
 router.get("/api/referrals", verifyToken, isAdmin, listReferrals);

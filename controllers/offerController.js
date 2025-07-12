@@ -212,6 +212,11 @@ export const updateOffer = async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
 
+    console.log("Update offer request received");
+    console.log("ID:", id);
+    console.log("Update data:", JSON.stringify(updateData, null, 2));
+    console.log("Request headers:", req.headers);
+
     const offer = await Offer.findOne({ _id: id, isDeleted: false });
 
     if (!offer) {
@@ -220,6 +225,8 @@ export const updateOffer = async (req, res) => {
         message: "Offer not found",
       });
     }
+
+    console.log("Found offer:", offer);
 
     // Validate products exist if provided
     if (updateData.products && updateData.products.length > 0) {
@@ -249,8 +256,12 @@ export const updateOffer = async (req, res) => {
       }
     }
 
+    console.log("About to update offer with data:", updateData);
     Object.assign(offer, updateData);
+    console.log("Offer after Object.assign:", offer);
+    
     await offer.save();
+    console.log("Offer saved successfully");
 
     const updatedOffer = await offer.populate([
       { path: "products", select: "name brand" },

@@ -8,6 +8,11 @@ import {
 } from "../utils/jwt.js";
 
 export const verifyToken = async function (req, res, next) {
+  console.log("verifyToken middleware called");
+  console.log("Request URL:", req.url);
+  console.log("Request method:", req.method);
+  console.log("Request headers:", req.headers);
+  
   let accessToken = req.cookies["accessToken"];
   // Check Authorization header if not in cookie
   if (
@@ -57,11 +62,16 @@ export const verifyToken = async function (req, res, next) {
 //1Middleware for admin access
 export const isAdmin = function (req, res, next) {
   console.log("inside isAdmin function");
+  console.log("User object:", req.user);
+  console.log("User role:", req.user?.role);
+  
   if (req.user.role !== "admin") {
+    console.log("Access denied - not admin");
     return res
       .status(403)
       .json({ message: `Access denied. You do not have admin privileges.` });
   }
+  console.log("Admin access granted");
   next();
 };
 

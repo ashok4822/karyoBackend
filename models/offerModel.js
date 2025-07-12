@@ -49,6 +49,7 @@ const offerSchema = new mongoose.Schema({
   maximumDiscount: {
     type: Number,
     min: 0,
+    default: null,
   },
   validFrom: {
     type: Date,
