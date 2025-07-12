@@ -10,7 +10,7 @@ const referralSchema = new mongoose.Schema({
   referred: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
-    required: true,
+    required: false, // Optional - will be set when someone registers using the link
   },
   referralCode: {
     type: String,

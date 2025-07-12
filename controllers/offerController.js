@@ -118,6 +118,9 @@ export const createOffer = async (req, res) => {
 // Get all offers with pagination and filters
 export const getOffers = async (req, res) => {
   try {
+    console.log("getOffers called with query:", req.query);
+    console.log("User:", req.user);
+    
     const {
       page = 1,
       limit = 10,
@@ -131,9 +134,24 @@ export const getOffers = async (req, res) => {
     const skip = (page - 1) * limit;
     const query = { isDeleted: false };
 
+    // Check if this is a public request (no admin authentication)
+    const isPublicRequest = !req.user || req.user.role !== 'admin';
+    console.log("Is public request:", isPublicRequest);
+    
+    if (isPublicRequest) {
+      // For public requests, only show active offers that are currently valid
+      const now = new Date();
+      query.status = "active";
+      query.validFrom = { $lte: now };
+      query.validTo = { $gte: now };
+      console.log("Public query filters:", query);
+    } else {
+      // For admin requests, apply status filter if provided
+      if (status) query.status = status;
+    }
+
     // Apply filters
     if (offerType) query.offerType = offerType;
-    if (status) query.status = status;
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: "i" } },
@@ -144,6 +162,8 @@ export const getOffers = async (req, res) => {
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder === "desc" ? -1 : 1;
 
+    console.log("Final query:", JSON.stringify(query, null, 2));
+
     const offers = await Offer.find(query)
       .populate([
         { path: "products", select: "name brand" },
@@ -152,6 +172,8 @@ export const getOffers = async (req, res) => {
       .sort(sortOptions)
       .skip(skip)
       .limit(parseInt(limit));
+
+    console.log("Found offers:", offers.length);
 
     const total = await Offer.countDocuments(query);
 

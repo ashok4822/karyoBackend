@@ -156,36 +156,44 @@ offerSchema.methods.calculateDiscount = function (orderAmount) {
 // Static method to get the best offer for a product
 offerSchema.statics.getBestOfferForProduct = async function (productId, categoryId) {
   const now = new Date();
-  
+
   // Get all valid offers for this product
   const offers = await this.find({
-    $or: [
-      { products: productId },
-      { category: categoryId }
-    ],
-    status: "active",
-    validFrom: { $lte: now },
-    validTo: { $gte: now },
-    isDeleted: false,
-    $or: [
-      { maxUsage: null },
-      { usageCount: { $lt: "$maxUsage" } }
+    $and: [
+      {
+        $or: [
+          { products: productId },
+          { category: categoryId }
+        ]
+      },
+      {
+        status: "active",
+        validFrom: { $lte: now },
+        validTo: { $gte: now },
+        isDeleted: false
+      },
+      {
+        $or: [
+          { maxUsage: null },
+          { $expr: { $lt: ["$usageCount", "$maxUsage"] } }
+        ]
+      }
     ]
   }).populate("products category");
-  
+
   if (offers.length === 0) return null;
-  
+
   // Find the offer with the highest discount value
   let bestOffer = offers[0];
   let bestDiscountValue = bestOffer.discountValue;
-  
+
   for (const offer of offers) {
     if (offer.discountValue > bestDiscountValue) {
       bestOffer = offer;
       bestDiscountValue = offer.discountValue;
     }
   }
-  
+
   return bestOffer;
 };
 

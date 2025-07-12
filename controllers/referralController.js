@@ -4,11 +4,10 @@ import Coupon from "../models/couponModel.js";
 import Offer from "../models/offerModel.js";
 import { statusCodes } from "../constants/statusCodes.js";
 import crypto from "crypto";
-
-// Generate referral code for user
+import { validateReferralCodeFormat, isReferralCodeAvailable } from "../utils/referralCodeGenerator.js";
 export const generateReferralCode = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.userId;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -71,7 +70,7 @@ export const generateReferralCode = async (req, res) => {
 // Get user's referral code
 export const getReferralCode = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.userId;
 
     const user = await User.findById(userId).select("referralCode referralCount totalReferralRewards");
     if (!user) {
@@ -102,7 +101,7 @@ export const getReferralCode = async (req, res) => {
 // Generate referral link with token
 export const generateReferralLink = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.userId;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -134,11 +133,33 @@ export const generateReferralLink = async (req, res) => {
       });
     }
 
-    // Create referral record
+    // Generate unique referral code for this link
+    let referralCode;
+    let isCodeUnique = false;
+    let codeAttempts = 0;
+    const maxCodeAttempts = 10;
+
+    while (!isCodeUnique && codeAttempts < maxCodeAttempts) {
+      referralCode = Referral.generateReferralCode();
+      const existingReferralWithCode = await Referral.findOne({ referralCode });
+      if (!existingReferralWithCode) {
+        isCodeUnique = true;
+      }
+      codeAttempts++;
+    }
+
+    if (!isCodeUnique) {
+      return res.status(statusCodes.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: "Failed to generate unique referral code",
+      });
+    }
+
+    // Create referral record (without referred user - will be set when someone registers)
     const referral = new Referral({
       referrer: userId,
       referralToken,
-      referralCode: user.referralCode || Referral.generateReferralCode(),
+      referralCode: referralCode,
     });
 
     await referral.save();
@@ -292,7 +313,7 @@ export const processReferral = async (req, res) => {
 // Get user's referral history
 export const getReferralHistory = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.userId;
     const { page = 1, limit = 10 } = req.query;
 
     const skip = (page - 1) * limit;
@@ -329,7 +350,7 @@ export const getReferralHistory = async (req, res) => {
 // Get referral statistics
 export const getReferralStats = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.userId;
 
     const user = await User.findById(userId).select("referralCount totalReferralRewards");
     if (!user) {

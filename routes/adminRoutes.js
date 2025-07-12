@@ -14,6 +14,7 @@ import {
   editCategory,
   deleteCategory,
   restoreCategory,
+  getActiveCategories,
 } from "../controllers/categoryController.js";
 import {
   listDiscounts,
@@ -157,6 +158,7 @@ router.get("/users", verifyAdmin, getUsersPaginated);
 router.patch("/users/:id/block", verifyToken, isAdmin, blockUnblockUser);
 router.post("/logout", adminLogout);
 router.get("/categories", verifyToken, isAdmin, listCategories);
+router.get("/categories/active", verifyToken, isAdmin, getActiveCategories);
 router.post("/categories", verifyToken, isAdmin, addCategory);
 router.put("/categories/:id", verifyToken, isAdmin, editCategory);
 router.delete("/categories/:id", verifyToken, isAdmin, deleteCategory);

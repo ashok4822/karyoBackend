@@ -8,6 +8,7 @@ import dotenv from "dotenv";
 import { transporter } from "../config/mail.js";
 import { OTP_EXPIRY_SECONDS } from "../config/constants.js";
 import jwt from "jsonwebtoken";
+import { generateUniqueReferralCode } from "../utils/referralCodeGenerator.js";
 dotenv.config();
 
 const PASSWORD_RESET_TOKEN_SECRET = process.env.PASSWORD_RESET_TOKEN_SECRET || "reset_secret";
@@ -61,11 +62,15 @@ export const registerUser = async function (req, res) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Generate unique referral code for the new user
+    const referralCode = await generateUniqueReferralCode(username);
+
     const user = new User({
       username,
       email,
       password: hashedPassword,
       mobileNo: undefined,
+      referralCode,
       referredBy: referral ? referral.referrer : undefined,
     });
 
