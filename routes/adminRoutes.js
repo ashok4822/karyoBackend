@@ -46,6 +46,17 @@ import path from "path";
 import { getDashboard } from "../controllers/adminDashboard.js";
 import { getAllOrders, getOrderByIdForAdmin, updateOrderStatus, updatePaymentStatus, deleteOrder, verifyReturnRequest, rejectReturnRequest, verifyReturnWithoutRefund, updateOrderItemStatus } from "../controllers/orderController.js";
 import { listCoupons, addCoupon, editCoupon, deleteCoupon, restoreCoupon } from "../controllers/couponController.js";
+import { 
+  getOffers as listOffers, 
+  createOffer as addOffer, 
+  getOfferById, 
+  updateOffer as editOffer, 
+  deleteOffer, 
+  toggleOfferStatus 
+} from "../controllers/offerController.js";
+import { 
+  getAllReferrals as listReferrals 
+} from "../controllers/referralController.js";
 
 const router = express.Router();
 
@@ -216,5 +227,16 @@ router.post("/coupons", verifyToken, isAdmin, addCoupon);
 router.put("/coupons/:id", verifyToken, isAdmin, editCoupon);
 router.delete("/coupons/:id", verifyToken, isAdmin, deleteCoupon);
 router.patch("/coupons/:id/restore", verifyToken, isAdmin, restoreCoupon);
+
+// Offer routes
+router.get("/api/offers", verifyToken, isAdmin, listOffers);
+router.post("/api/offers", verifyToken, isAdmin, addOffer);
+router.get("/api/offers/:id", verifyToken, isAdmin, getOfferById);
+router.put("/api/offers/:id", verifyToken, isAdmin, editOffer);
+router.delete("/api/offers/:id", verifyToken, isAdmin, deleteOffer);
+router.patch("/api/offers/:id/status", verifyToken, isAdmin, toggleOfferStatus);
+
+// Referral routes
+router.get("/api/referrals", verifyToken, isAdmin, listReferrals);
 
 export default router;

@@ -14,6 +14,8 @@ import passport from "passport";
 import "./config/google.js";
 import wishlistRoutes from "./routes/wishlistRoutes.js";
 import cartRoutes from "./routes/cartRoutes.js";
+import offerRoutes from "./routes/offerRoutes.js";
+import referralRoutes from "./routes/referralRoutes.js";
 dotenv.config();
 
 const app = express();
@@ -81,6 +83,12 @@ app.use("/wishlist", wishlistRoutes);
 
 // Cart routes
 app.use("/cart", cartRoutes);
+
+// Offer routes
+app.use("/api", offerRoutes);
+
+// Referral routes
+app.use("/api", referralRoutes);
 
 //Public routes
 app.use("/", publicRoutes);

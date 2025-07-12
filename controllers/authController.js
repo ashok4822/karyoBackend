@@ -2,6 +2,7 @@ import { generateAccessToken, generateRefreshToken } from "../utils/jwt.js";
 import { validationResult } from "express-validator";
 import User from "../models/userModel.js";
 import Otp from "../models/otpModel.js";
+import Referral from "../models/referralModel.js";
 import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
 import { transporter } from "../config/mail.js";
@@ -17,7 +18,7 @@ function generateOtp() {
 }
 
 export const registerUser = async function (req, res) {
-  const { username, email, password } = req.body;
+  const { username, email, password, referralCode, referralToken } = req.body;
   // console.log(username, email, password);
 
   const errors = validationResult(req);
@@ -44,6 +45,20 @@ export const registerUser = async function (req, res) {
       return res.status(400).json({ message: `Username already exists` });
     }
 
+    // Validate referral if provided
+    let referral = null;
+    if (referralCode || referralToken) {
+      if (referralToken) {
+        referral = await Referral.isValidReferralToken(referralToken);
+      } else if (referralCode) {
+        referral = await Referral.isValidReferralCode(referralCode);
+      }
+
+      if (!referral) {
+        return res.status(400).json({ message: "Invalid or expired referral code/token" });
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = new User({
@@ -51,6 +66,7 @@ export const registerUser = async function (req, res) {
       email,
       password: hashedPassword,
       mobileNo: undefined,
+      referredBy: referral ? referral.referrer : undefined,
     });
 
     const savedUserData = await user.save();
@@ -58,6 +74,25 @@ export const registerUser = async function (req, res) {
     if (!savedUserData) {
       return res.status(400).json({ message: `Failed to update on database` });
     } else {
+      // Process referral if valid
+      if (referral) {
+        try {
+          referral.referred = savedUserData._id;
+          await referral.completeReferral();
+
+          // Update referrer's referral count
+          await User.findByIdAndUpdate(referral.referrer, {
+            $inc: { referralCount: 1 },
+          });
+
+          // Generate reward coupon for referrer (this would be handled by the referral service)
+          // For now, we'll just complete the referral
+        } catch (referralError) {
+          console.error("Error processing referral:", referralError);
+          // Don't fail registration if referral processing fails
+        }
+      }
+
       const accessToken = generateAccessToken(savedUserData);
       const refreshToken = generateRefreshToken(savedUserData);
       await User.updateOne(
