@@ -48,14 +48,24 @@ export const registerUser = async function (req, res) {
 
     // Validate referral if provided
     let referral = null;
+    let referrerUser = null;
+    let usedReferralCode = null;
     if (referralCode || referralToken) {
       if (referralToken) {
         referral = await Referral.isValidReferralToken(referralToken);
       } else if (referralCode) {
+        // Try to find a Referral document first
         referral = await Referral.isValidReferralCode(referralCode);
+        if (!referral) {
+          // If not found, try to find a user with this code
+          referrerUser = await User.findOne({ referralCode: referralCode });
+          if (!referrerUser) {
+            return res.status(400).json({ message: "Invalid or expired referral code/token" });
+          }
+          usedReferralCode = referralCode;
+        }
       }
-
-      if (!referral) {
+      if (!referral && !referrerUser) {
         return res.status(400).json({ message: "Invalid or expired referral code/token" });
       }
     }
@@ -63,15 +73,15 @@ export const registerUser = async function (req, res) {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Generate unique referral code for the new user
-    const referralCode = await generateUniqueReferralCode(username);
-
+    const newReferralCode = await generateUniqueReferralCode(username);
+    // Set referredBy if referrerUser is found
     const user = new User({
       username,
       email,
       password: hashedPassword,
       mobileNo: undefined,
-      referralCode,
-      referredBy: referral ? referral.referrer : undefined,
+      referralCode: newReferralCode,
+      referredBy: referrerUser ? referrerUser._id : (referral ? referral.referrer : undefined),
     });
 
     const savedUserData = await user.save();
@@ -80,18 +90,41 @@ export const registerUser = async function (req, res) {
       return res.status(400).json({ message: `Failed to update on database` });
     } else {
       // Process referral if valid
-      if (referral) {
+      if (referral || referrerUser) {
         try {
-          referral.referred = savedUserData._id;
-          await referral.completeReferral();
-
+          let referralDoc = referral;
+          if (!referralDoc && referrerUser) {
+            // Create a new Referral document
+            referralDoc = new Referral({
+              referrer: referrerUser._id,
+              referred: savedUserData._id,
+              referralCode: usedReferralCode,
+              status: "completed",
+              completedAt: new Date(),
+            });
+            await referralDoc.save();
+          } else if (referralDoc) {
+            referralDoc.referred = savedUserData._id;
+            await referralDoc.completeReferral();
+          }
           // Update referrer's referral count
-          await User.findByIdAndUpdate(referral.referrer, {
+          const referrerId = referrerUser ? referrerUser._id : referralDoc.referrer;
+          await User.findByIdAndUpdate(referrerId, {
             $inc: { referralCount: 1 },
           });
+          // Update new user's referredBy field
+          await User.findByIdAndUpdate(savedUserData._id, {
+            referredBy: referrerId,
+          });
+          // Generate reward coupon for referrer
+          const { generateReferralReward } = await import('../controllers/referralController.js');
+          const rewardCoupon = await generateReferralReward(referrerId);
 
-          // Generate reward coupon for referrer (this would be handled by the referral service)
-          // For now, we'll just complete the referral
+          // Update referral with reward coupon
+          referralDoc.rewardCoupon = rewardCoupon._id;
+          await referralDoc.save();
+
+          console.log(`Referral completed successfully. Coupon generated: ${rewardCoupon.code}`);
         } catch (referralError) {
           console.error("Error processing referral:", referralError);
           // Don't fail registration if referral processing fails
@@ -205,7 +238,7 @@ export const requestOtp = async (req, res) => {
 };
 
 export const verifyOtp = async (req, res) => {
-  const { email, otp, username, password } = req.body;
+  const { email, otp, username, password, referralCode, referralToken } = req.body;
   if (!email || !otp || !username || !password)
     return res.status(400).json({ message: "All fields required" });
   const otpDoc = await Otp.findOne({ email, otp });
@@ -221,14 +254,83 @@ export const verifyOtp = async (req, res) => {
       .json({ message: "OTP expired. Please request a new one." });
   }
   const hashedPassword = await bcrypt.hash(password, 10);
+
+  // Referral logic for OTP-based signup
+  let referral = null;
+  let referrerUser = null;
+  let usedReferralCode = null;
+  if (referralCode || referralToken) {
+    if (referralToken) {
+      referral = await Referral.isValidReferralToken(referralToken);
+    } else if (referralCode) {
+      referral = await Referral.isValidReferralCode(referralCode);
+      if (!referral) {
+        referrerUser = await User.findOne({ referralCode: referralCode });
+        if (!referrerUser) {
+          return res.status(400).json({ message: "Invalid or expired referral code/token" });
+        }
+        usedReferralCode = referralCode;
+      }
+    }
+    if (!referral && !referrerUser) {
+      return res.status(400).json({ message: "Invalid or expired referral code/token" });
+    }
+  }
+
+  // Generate unique referral code for the new user
+  const newReferralCode = await generateUniqueReferralCode(username);
+  // Set referredBy if referrerUser is found
   const user = new User({
     email,
     username,
     password: hashedPassword,
     mobileNo: undefined,
+    referralCode: newReferralCode,
+    referredBy: referrerUser ? referrerUser._id : (referral ? referral.referrer : undefined),
   });
   await user.save();
   await Otp.deleteMany({ email });
+
+  // Process referral if valid
+  if (referral || referrerUser) {
+    try {
+      let referralDoc = referral;
+      if (!referralDoc && referrerUser) {
+        // Create a new Referral document
+        referralDoc = new Referral({
+          referrer: referrerUser._id,
+          referred: user._id,
+          referralCode: usedReferralCode,
+          status: "completed",
+          completedAt: new Date(),
+        });
+        await referralDoc.save();
+      } else if (referralDoc) {
+        referralDoc.referred = user._id;
+        await referralDoc.completeReferral();
+      }
+      // Update referrer's referral count
+      const referrerId = referrerUser ? referrerUser._id : referralDoc.referrer;
+      await User.findByIdAndUpdate(referrerId, {
+        $inc: { referralCount: 1 },
+      });
+      // Update new user's referredBy field
+      await User.findByIdAndUpdate(user._id, {
+        referredBy: referrerId,
+      });
+      // Generate reward coupon for referrer
+      const { generateReferralReward } = await import('../controllers/referralController.js');
+      const rewardCoupon = await generateReferralReward(referrerId);
+      // Update referral with reward coupon
+      referralDoc.rewardCoupon = rewardCoupon._id;
+      await referralDoc.save();
+      console.log(`Referral completed successfully. Coupon generated: ${rewardCoupon.code}`);
+    } catch (referralError) {
+      console.error("Error processing referral (OTP signup):", referralError);
+      // Don't fail registration if referral processing fails
+    }
+  }
+
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
   const isProduction = process.env.NODE_ENV === "production";

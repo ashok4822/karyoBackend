@@ -399,7 +399,7 @@ export const getReferralStats = async (req, res) => {
 };
 
 // Helper function to generate referral reward coupon
-const generateReferralReward = async (referrerId) => {
+export const generateReferralReward = async (referrerId) => {
   try {
     // Get referral offer
     const referralOffer = await Offer.findOne({
