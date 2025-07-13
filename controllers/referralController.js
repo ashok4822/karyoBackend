@@ -4,7 +4,10 @@ import Coupon from "../models/couponModel.js";
 import Offer from "../models/offerModel.js";
 import { statusCodes } from "../constants/statusCodes.js";
 import crypto from "crypto";
-import { validateReferralCodeFormat, isReferralCodeAvailable } from "../utils/referralCodeGenerator.js";
+import {
+  validateReferralCodeFormat,
+  isReferralCodeAvailable,
+} from "../utils/referralCodeGenerator.js";
 export const generateReferralCode = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -72,7 +75,9 @@ export const getReferralCode = async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    const user = await User.findById(userId).select("referralCode referralCount totalReferralRewards");
+    const user = await User.findById(userId).select(
+      "referralCode referralCount totalReferralRewards"
+    );
     if (!user) {
       return res.status(statusCodes.NOT_FOUND).json({
         success: false,
@@ -165,8 +170,8 @@ export const generateReferralLink = async (req, res) => {
     await referral.save();
 
     // Generate referral link
-    const baseUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-    const referralLink = `${baseUrl}/register?ref=${referralToken}`;
+    const baseUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+    const referralLink = `${baseUrl}/signup?ref=${referralToken}`;
 
     res.status(statusCodes.OK).json({
       success: true,
@@ -215,7 +220,9 @@ export const validateReferral = async (req, res) => {
     }
 
     // Get referrer details
-    const referrer = await User.findById(referral.referrer).select("username email firstName lastName");
+    const referrer = await User.findById(referral.referrer).select(
+      "username email firstName lastName"
+    );
 
     res.status(statusCodes.OK).json({
       success: true,
@@ -352,7 +359,9 @@ export const getReferralStats = async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    const user = await User.findById(userId).select("referralCount totalReferralRewards");
+    const user = await User.findById(userId).select(
+      "referralCount totalReferralRewards"
+    );
     if (!user) {
       return res.status(statusCodes.NOT_FOUND).json({
         success: false,
@@ -421,7 +430,7 @@ export const generateReferralReward = async (referrerId) => {
     const maxAttempts = 10;
 
     while (!isUnique && attempts < maxAttempts) {
-      couponCode = `REF${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+      couponCode = `REF${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
       const existingCoupon = await Coupon.findOne({ code: couponCode });
       if (!existingCoupon) {
         isUnique = true;
@@ -505,4 +514,4 @@ export const getAllReferrals = async (req, res) => {
       error: error.message,
     });
   }
-}; 
+};

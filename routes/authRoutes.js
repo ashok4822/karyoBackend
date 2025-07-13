@@ -41,6 +41,15 @@ if (process.env.NODE_ENV !== 'production') {
 
 router.get(
   "/google",
+  (req, res, next) => {
+    // Capture referral token/code from ?ref=... and store globally for the OAuth callback
+    if (req.query.ref) {
+      global._passport_oauth_referral = { referralToken: req.query.ref, referralCode: req.query.ref };
+    } else {
+      global._passport_oauth_referral = null;
+    }
+    next();
+  },
   passport.authenticate("google", { scope: ["profile", "email"] })
 );
 
