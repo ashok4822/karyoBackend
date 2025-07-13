@@ -1,8 +1,50 @@
 import Coupon from "../models/couponModel.js";
 
+// Function to automatically update expired coupons
+const updateExpiredCoupons = async () => {
+  try {
+    const now = new Date();
+    const result = await Coupon.updateMany(
+      {
+        status: { $in: ["active", "inactive"] },
+        validTo: { $lt: now },
+        isDeleted: false
+      },
+      {
+        $set: { status: "expired" }
+      }
+    );
+    
+    if (result.modifiedCount > 0) {
+      console.log(`Updated ${result.modifiedCount} expired coupons`);
+    }
+    
+    return result.modifiedCount;
+  } catch (error) {
+    console.error("Error updating expired coupons:", error);
+    return 0;
+  }
+};
+
+// Manual trigger to update expired coupons
+export const triggerExpiredCouponUpdate = async (req, res) => {
+  try {
+    const updatedCount = await updateExpiredCoupons();
+    res.json({ 
+      message: `Successfully updated ${updatedCount} expired coupons`,
+      updatedCount 
+    });
+  } catch (error) {
+    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
 // List coupons with search, pagination, sort, and filter by status
 export const listCoupons = async (req, res) => {
   try {
+    // First, update any expired coupons
+    await updateExpiredCoupons();
+    
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const search = req.query.search || "";
@@ -152,6 +194,32 @@ export const editCoupon = async (req, res) => {
     if (status !== undefined) coupon.status = status;
     if (maxUsage !== undefined) coupon.maxUsage = maxUsage ? parseInt(maxUsage) : null;
     if (maxUsagePerUser !== undefined) coupon.maxUsagePerUser = maxUsagePerUser ? parseInt(maxUsagePerUser) : null;
+
+    // Debug output before status logic
+    console.log('DEBUG: Before status reset logic:', {
+      couponId: coupon._id,
+      currentStatus: coupon.status,
+      validTo: coupon.validTo,
+      now: new Date(),
+      incomingStatus: status
+    });
+
+    // If the coupon was expired but now has a future validTo, reset status
+    const now = new Date();
+    if (coupon.validTo > now && coupon.status === "expired") {
+      // If the incoming status is 'expired', override to 'active'
+      coupon.status = (status && status !== "expired") ? status : "active";
+      console.log('DEBUG: Status reset triggered. New status:', coupon.status);
+    }
+
+    // Debug output after status logic
+    console.log('DEBUG: Before save:', {
+      couponId: coupon._id,
+      finalStatus: coupon.status,
+      validTo: coupon.validTo,
+      now: now
+    });
+
     await coupon.save();
     res.json({ message: "Coupon updated successfully", coupon });
   } catch (error) {

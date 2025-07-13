@@ -115,6 +115,22 @@ export const createOffer = async (req, res) => {
   }
 };
 
+// Function to automatically update expired offers
+const updateExpiredOffers = async () => {
+  const now = new Date();
+  const result = await Offer.updateMany(
+    {
+      status: { $in: ["active", "inactive"] },
+      validTo: { $lt: now },
+      isDeleted: false
+    },
+    { $set: { status: "expired" } }
+  );
+  if (result.modifiedCount > 0) {
+    console.log(`Updated ${result.modifiedCount} expired offers`);
+  }
+};
+
 // Get all offers with pagination and filters
 export const getOffers = async (req, res) => {
   try {
@@ -138,6 +154,11 @@ export const getOffers = async (req, res) => {
     const isPublicRequest = !req.user || req.user.role !== 'admin';
     console.log("Is public request:", isPublicRequest);
     
+    // Auto-update expired offers for admin requests
+    if (!isPublicRequest) {
+      await updateExpiredOffers();
+    }
+
     if (isPublicRequest) {
       // For public requests, only show active offers that are currently valid
       const now = new Date();
@@ -281,6 +302,13 @@ export const updateOffer = async (req, res) => {
     console.log("About to update offer with data:", updateData);
     Object.assign(offer, updateData);
     console.log("Offer after Object.assign:", offer);
+
+    // If the offer was expired but now has a future validTo, reset status
+    const now = new Date();
+    if (offer.validTo > now && offer.status === "expired") {
+      offer.status = "active";
+      console.log('DEBUG: Offer status forcibly set to active.');
+    }
     
     await offer.save();
     console.log("Offer saved successfully");

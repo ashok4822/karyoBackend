@@ -5,7 +5,6 @@ import mongoose from "mongoose";
 
 // Create a new order
 export const createOrder = async (req, res) => {
-  // console.log("createOrder called", req.body, req.user);
   try {
     const {
       items,
@@ -14,6 +13,7 @@ export const createOrder = async (req, res) => {
       subtotal,
       subtotalAfterDiscount,
       discount,
+      offers, // <-- Add this line to destructure offers from req.body
       shipping,
       total,
     } = req.body;
@@ -39,12 +39,10 @@ export const createOrder = async (req, res) => {
     if (discount && discount.discountId) {
       // First check in Discount model
       let discountDoc = await Discount.findById(discount.discountId);
-      
       // If not found in Discount model, check in Coupon model
       if (!discountDoc) {
         const Coupon = (await import("../models/couponModel.js")).default;
         const couponDoc = await Coupon.findById(discount.discountId);
-        
         if (couponDoc) {
           // Convert coupon to discount format for consistency
           discountDoc = {
@@ -69,16 +67,13 @@ export const createOrder = async (req, res) => {
           };
         }
       }
-      
       if (!discountDoc) {
         return res.status(400).json({ message: "Invalid discount" });
       }
-
       // Check if discount is still valid
       if (!discountDoc.isValid) {
         return res.status(400).json({ message: "Discount is no longer valid" });
       }
-
       // Check minimum amount requirement
       if (
         discountDoc.minimumAmount > 0 &&
@@ -88,7 +83,6 @@ export const createOrder = async (req, res) => {
           message: `Minimum order amount of ₹${discountDoc.minimumAmount} required for this discount`,
         });
       }
-
       // Check global usage limit
       if (
         discountDoc.maxUsage &&
@@ -98,7 +92,6 @@ export const createOrder = async (req, res) => {
           .status(400)
           .json({ message: "Discount usage limit reached" });
       }
-
       // Check per-user usage limit
       const userUsage = await UserDiscountUsage.getOrCreate(
         req.user.userId,
@@ -109,22 +102,13 @@ export const createOrder = async (req, res) => {
           message: `You have reached your personal usage limit for this discount`,
         });
       }
-
       // Update global discount/coupon usage count
       if (discountDoc.usageCount !== undefined) {
-        discountDoc.usageCount += 1;
-        // Check if it's a Coupon model instance or a plain object
-        if (discountDoc.save) {
-          await discountDoc.save();
-        } else {
-          // If it's a plain object (from Coupon model), update directly
-          const Coupon = (await import("../models/couponModel.js")).default;
-          await Coupon.findByIdAndUpdate(discount.discountId, {
-            $inc: { usageCount: 1 }
-          });
-        }
+        // Use findByIdAndUpdate instead of save() to avoid validation issues
+        await Discount.findByIdAndUpdate(discount.discountId, {
+          $inc: { usageCount: 1 }
+        });
       }
-
       // Update user-specific usage count
       await userUsage.incrementUsage();
     }
@@ -138,7 +122,6 @@ export const createOrder = async (req, res) => {
             "Cash on Delivery is not available for orders above ₹50,000. Please use online payment.",
         });
       }
-
       // Check if COD is available for the shipping address location
       const codRestrictedStates = [
         "Jammu & Kashmir",
@@ -158,6 +141,7 @@ export const createOrder = async (req, res) => {
     }
 
     // Create the order
+    console.log("Received offers in order:", offers);
     const order = new Order({
       user: req.user.userId,
       items,
@@ -166,11 +150,12 @@ export const createOrder = async (req, res) => {
       subtotal,
       subtotalAfterDiscount,
       discount,
+      offers, // <-- this is now included
       shipping,
       total,
     });
-
     await order.save();
+    console.log("Saved order offers:", order.offers);
 
     // Decrement stock for each ordered product variant
     for (const item of items) {
@@ -205,6 +190,7 @@ export const createOrder = async (req, res) => {
         subtotal: order.subtotal,
         subtotalAfterDiscount: order.subtotalAfterDiscount,
         discount: order.discount,
+        offers: order.offers,
         shipping: order.shipping,
         total: order.total,
         status: order.status,
@@ -225,8 +211,8 @@ export const createOrder = async (req, res) => {
       },
     });
   } catch (error) {
-    // console.error("Error creating order:", error);
-    if (error.stack) // console.error(error.stack);
+    // Keep only essential error logging
+    console.error("Error creating order:", error);
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
@@ -325,7 +311,12 @@ export const getOrderById = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    res.json({ order });
+    res.json({ 
+      order: {
+        ...order.toObject(),
+        offers: order.offers
+      }
+    });
   } catch (error) {
     // console.error("Error getting order:", error);
     res

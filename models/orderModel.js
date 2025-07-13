@@ -119,7 +119,6 @@ const orderSchema = new mongoose.Schema({
   discount: {
     discountId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Discount",
     },
     discountName: String,
     discountAmount: {
@@ -132,6 +131,24 @@ const orderSchema = new mongoose.Schema({
     },
     discountValue: Number,
   },
+  offers: [{
+    offerId: {
+      type: mongoose.Schema.Types.ObjectId,
+    },
+    offerName: String,
+    offerAmount: {
+      type: Number,
+      min: 0,
+    },
+    offerType: {
+      type: String,
+      enum: ["percentage", "fixed"],
+    },
+    offerValue: Number,
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+    },
+  }],
   shipping: {
     type: Number,
     required: true,

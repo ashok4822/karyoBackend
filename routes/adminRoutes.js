@@ -46,7 +46,7 @@ import fs from "fs";
 import path from "path";
 import { getDashboard } from "../controllers/adminDashboard.js";
 import { getAllOrders, getOrderByIdForAdmin, updateOrderStatus, updatePaymentStatus, deleteOrder, verifyReturnRequest, rejectReturnRequest, verifyReturnWithoutRefund, updateOrderItemStatus } from "../controllers/orderController.js";
-import { listCoupons, addCoupon, editCoupon, deleteCoupon, restoreCoupon } from "../controllers/couponController.js";
+import { listCoupons, addCoupon, editCoupon, deleteCoupon, restoreCoupon, triggerExpiredCouponUpdate } from "../controllers/couponController.js";
 import { 
   getOffers as listOffers, 
   createOffer as addOffer, 
@@ -232,6 +232,7 @@ router.post("/coupons", verifyToken, isAdmin, addCoupon);
 router.put("/coupons/:id", verifyToken, isAdmin, editCoupon);
 router.delete("/coupons/:id", verifyToken, isAdmin, deleteCoupon);
 router.patch("/coupons/:id/restore", verifyToken, isAdmin, restoreCoupon);
+router.post("/coupons/update-expired", verifyToken, isAdmin, triggerExpiredCouponUpdate);
 
 // Test route
 router.get("/test", (req, res) => {

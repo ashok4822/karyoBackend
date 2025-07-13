@@ -8,7 +8,6 @@ const userDiscountUsageSchema = new mongoose.Schema({
   },
   discount: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Discount",
     required: true,
   },
   usageCount: {
