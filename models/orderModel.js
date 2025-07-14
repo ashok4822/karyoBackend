@@ -159,10 +159,12 @@ const orderSchema = new mongoose.Schema({
     required: true,
     min: 0,
   },
+  // DEPRECATED: order.status is for summary/legacy use only. Do not use for business logic or UI except for summary.
   status: {
     type: String,
     enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "returned", "return_verified", "rejected"],
     default: "pending",
+    // Deprecated: use item.itemStatus for all logic/UI
   },
   orderNumber: {
     type: String,

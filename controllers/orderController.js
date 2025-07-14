@@ -2,6 +2,16 @@ import Order from "../models/orderModel.js";
 import Discount from "../models/discountModel.js";
 import UserDiscountUsage from "../models/userDiscountUsageModel.js";
 import mongoose from "mongoose";
+import Razorpay from "razorpay";
+import crypto from "crypto";
+import dotenv from "dotenv";
+dotenv.config();
+
+// Razorpay instance
+const razorpay = new Razorpay({
+  key_id: process.env.RAZOR_KEY_ID,
+  key_secret: process.env.RAZOR_SECRET_ID,
+});
 
 // Create a new order
 export const createOrder = async (req, res) => {
@@ -142,9 +152,14 @@ export const createOrder = async (req, res) => {
 
     // Create the order
     console.log("Received offers in order:", offers);
+    // Set per-item payment status for online payments
+    const itemsWithPaymentStatus = items.map(item => ({
+      ...item,
+      itemPaymentStatus: paymentMethod === "online" ? "paid" : "pending"
+    }));
     const order = new Order({
       user: req.user.userId,
-      items,
+      items: itemsWithPaymentStatus,
       shippingAddress,
       paymentMethod,
       subtotal,
@@ -153,6 +168,7 @@ export const createOrder = async (req, res) => {
       offers, // <-- this is now included
       shipping,
       total,
+      paymentStatus: paymentMethod === "online" ? "paid" : "pending",
     });
     await order.save();
     console.log("Saved order offers:", order.offers);
@@ -216,6 +232,41 @@ export const createOrder = async (req, res) => {
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
+  }
+};
+
+// Create Razorpay order
+export const createRazorpayOrder = async (req, res) => {
+  try {
+    const { amount, currency = "INR", receipt } = req.body;
+    if (!amount) return res.status(400).json({ message: "Amount is required" });
+    const options = {
+      amount: Math.round(amount * 100), // Razorpay expects paise
+      currency,
+      receipt: receipt || `rcpt_${Date.now()}`,
+    };
+    const order = await razorpay.orders.create(options);
+    res.status(201).json({ order });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to create Razorpay order", error: error.message });
+  }
+};
+
+// Verify Razorpay payment signature
+export const verifyRazorpayPayment = async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const sign = `${razorpay_order_id}|${razorpay_payment_id}`;
+    const expectedSignature = crypto.createHmac("sha256", process.env.RAZOR_SECRET_ID)
+      .update(sign)
+      .digest("hex");
+    if (expectedSignature === razorpay_signature) {
+      res.status(200).json({ success: true, message: "Payment verified" });
+    } else {
+      res.status(400).json({ success: false, message: "Invalid signature" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Failed to verify payment", error: error.message });
   }
 };
 
@@ -372,31 +423,29 @@ export const getOrderByIdForAdmin = async (req, res) => {
 // Cancel order
 export const cancelOrder = async (req, res) => {
   try {
+    console.log("Entered cancelOrder for order:", req.params.id);
     const { id } = req.params;
     const { reason, productVariantIds } = req.body;
     const order = await Order.findOne({ _id: id, user: req.user.userId });
 
     if (!order) {
+      console.log("Order not found for id:", id);
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // Only allow cancellation of pending orders
-    if (order.status !== "pending") {
-      return res.status(400).json({
-        message: "Only pending orders can be cancelled",
-      });
-    }
-
+    // Only allow cancellation of pending items
     // If productVariantIds provided, cancel specific products
     if (Array.isArray(productVariantIds) && productVariantIds.length > 0) {
       let anyCancelled = false;
       for (const item of order.items) {
         if (
           productVariantIds.includes(item.productVariantId.toString()) &&
-          !item.cancelled
+          !item.cancelled &&
+          item.itemStatus !== 'cancelled'
         ) {
           item.cancelled = true;
           item.cancellationReason = reason || "";
+          item.itemStatus = 'cancelled'; // Set per-item status only
           // Increment stock for the product variant
           await mongoose.model("ProductVariant").findByIdAndUpdate(
             item.productVariantId,
@@ -406,42 +455,102 @@ export const cancelOrder = async (req, res) => {
         }
       }
       if (!anyCancelled) {
+        console.log("No valid items to cancel for order:", id);
         return res.status(400).json({ message: "No valid items to cancel." });
       }
-      // If all items are now cancelled, set order status to cancelled
-      if (order.items.every((item) => item.cancelled)) {
+      // If all items are now cancelled, set order.status to cancelled (summary only)
+      if (order.items.every((item) => item.cancelled || item.itemStatus === 'cancelled')) {
         order.status = "cancelled";
         order.cancellationReason = reason || "";
       }
+      // Refund for partial cancellation in online payment orders
+      if (order.paymentMethod === "online") {
+        const Wallet = mongoose.model('Wallet');
+        let wallet = await Wallet.findOne({ user: order.user });
+        if (!wallet) {
+          wallet = await Wallet.create({ user: order.user });
+        }
+        // Calculate total of all items (avoid division by zero)
+        const totalOrderItems = order.items.reduce((sum, i) => sum + (i.price * i.quantity), 0) || 1;
+        // For each newly cancelled item, refund proportional amount
+        for (const item of order.items) {
+          if (productVariantIds.includes(item.productVariantId.toString()) && item.cancelled && item.itemPaymentStatus !== 'refunded') {
+            let refundAmount = item.price * item.quantity;
+            // Proportional discount
+            let itemDiscount = 0;
+            if (order.discount && order.discount.discountAmount > 0) {
+              itemDiscount = (refundAmount / totalOrderItems) * order.discount.discountAmount;
+            }
+            // Proportional offer
+            let itemOffer = 0;
+            if (order.offers && order.offers.length > 0) {
+              const totalOffer = order.offers.reduce((sum, offer) => sum + (offer.offerAmount || 0), 0);
+              itemOffer = (refundAmount / totalOrderItems) * totalOffer;
+            }
+            // Proportional shipping
+            let itemShipping = 0;
+            if (order.shipping && order.items.length > 0) {
+              itemShipping = order.shipping / order.items.length;
+            }
+            refundAmount = Math.max(0, refundAmount - itemDiscount - itemOffer + itemShipping);
+            wallet.balance += refundAmount;
+            wallet.transactions.push({
+              type: 'credit',
+              amount: refundAmount,
+              description: `Refund for cancelled product in order ${order.orderNumber} (ONLINE) - Refunded by system`
+            });
+            item.itemPaymentStatus = 'refunded';
+          }
+        }
+        await wallet.save();
+      }
       await order.save();
+      console.log("Partial cancellation processed for order:", id);
       return res.json({
         message:
-          order.status === "cancelled"
+          order.items.every((item) => item.cancelled || item.itemStatus === 'cancelled')
             ? "Order cancelled successfully"
             : "Selected products cancelled successfully",
         order: {
           _id: order._id,
           orderNumber: order.orderNumber,
-          status: order.status,
+          status: order.status, // summary only
           items: order.items,
           total: order.total,
         },
       });
     }
 
-    // Otherwise, cancel the whole order
+    // Otherwise, cancel the whole order (legacy/summary)
     order.status = "cancelled";
     order.cancellationReason = reason || "";
     // Increment stock for all items
     for (const item of order.items) {
-      if (!item.cancelled) {
+      if (!item.cancelled && item.itemStatus !== 'cancelled') {
         await mongoose.model("ProductVariant").findByIdAndUpdate(
           item.productVariantId,
           { $inc: { stock: item.quantity } }
         );
         item.cancelled = true;
         item.cancellationReason = reason || "";
+        item.itemStatus = 'cancelled';
       }
+    }
+    // Refund for online payment
+    if (order.paymentMethod === "online" && order.paymentStatus !== "refunded") {
+      const Wallet = mongoose.model('Wallet');
+      let wallet = await Wallet.findOne({ user: order.user });
+      if (!wallet) {
+        wallet = await Wallet.create({ user: order.user });
+      }
+      wallet.balance += order.total;
+      wallet.transactions.push({
+        type: 'credit',
+        amount: order.total,
+        description: `Refund for cancelled order ${order.orderNumber} (ONLINE) - Refunded by system`
+      });
+      await wallet.save();
+      order.paymentStatus = 'refunded';
     }
     await order.save();
     res.json({
@@ -449,13 +558,12 @@ export const cancelOrder = async (req, res) => {
       order: {
         _id: order._id,
         orderNumber: order.orderNumber,
-        status: order.status,
+        status: order.status, // summary only
         items: order.items,
         total: order.total,
       },
     });
   } catch (error) {
-    // console.error("Error cancelling order:", error);
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
@@ -739,7 +847,7 @@ export const deleteOrder = async (req, res) => {
   }
 };
 
-// Return order
+// Return order (per-item)
 export const returnOrder = async (req, res) => {
   try {
     const { id } = req.params;
@@ -751,20 +859,24 @@ export const returnOrder = async (req, res) => {
     if (!order) {
       return res.status(404).json({ message: 'Order not found.' });
     }
-    // Remove order.status check; allow per-item return if itemStatus === 'delivered'
+    // Allow per-item return if itemStatus === 'delivered'
     let anyReturned = false;
     for (const reqItem of items) {
       const item = order.items.find(i => i.productVariantId.toString() === reqItem.productVariantId);
       if (item && !item.returned && item.itemStatus === 'delivered') {
         item.returned = true;
         item.returnReason = reqItem.reason || '';
+        item.itemStatus = 'returned'; // Set per-item status only
         anyReturned = true;
       }
     }
     if (!anyReturned) {
       return res.status(400).json({ message: 'No valid items to return. Only delivered, non-returned items can be returned.' });
     }
-    order.status = 'returned';
+    // If all items are returned, set order.status = 'returned' (summary only)
+    if (order.items.every(item => item.itemStatus === 'returned' || item.returned)) {
+      order.status = 'returned';
+    }
     await order.save();
     res.json({ message: 'Order return requested successfully.', order });
   } catch (error) {
@@ -889,7 +1001,7 @@ export const verifyReturnWithoutRefund = async (req, res) => {
   }
 };
 
-// Add per-item status update controller
+// Update order item status (per-item)
 export const updateOrderItemStatus = async (req, res) => {
   try {
     const { orderId, itemId } = req.params;
@@ -907,47 +1019,47 @@ export const updateOrderItemStatus = async (req, res) => {
       item.itemStatus = status;
     }
     if (typeof paymentStatus !== 'undefined') {
-      // Wallet refund for COD per-item refund
+      // Wallet refund for per-item refund (COD or online)
       if (
         paymentStatus === 'refunded' &&
         item.itemPaymentStatus !== 'refunded' &&
-        order.paymentMethod === 'cod'
+        (order.paymentMethod === 'cod' || order.paymentMethod === 'online')
       ) {
-        // Import Wallet model
         const Wallet = mongoose.model('Wallet');
-        // Find or create user's wallet
         let wallet = await Wallet.findOne({ user: order.user });
         if (!wallet) {
           wallet = await Wallet.create({ user: order.user });
         }
-        // Calculate refund amount for this item
         let refundAmount = item.price * item.quantity;
-        // Deduct proportional discount if any
+        const totalOrderItems = order.items.reduce((sum, i) => sum + (i.price * i.quantity), 0) || 1;
+        let itemDiscount = 0;
         if (order.discount && order.discount.discountAmount > 0) {
-          // Calculate total of all non-cancelled items
-          const totalNonCancelled = order.items
-            .filter(i => !i.cancelled)
-            .reduce((sum, i) => sum + (i.price * i.quantity), 0);
-          // Proportional discount for this item
-          const itemDiscount = (refundAmount / totalNonCancelled) * order.discount.discountAmount;
-          refundAmount = Math.max(0, refundAmount - itemDiscount);
+          itemDiscount = (refundAmount / totalOrderItems) * order.discount.discountAmount;
         }
+        let itemOffer = 0;
+        if (order.offers && order.offers.length > 0) {
+          const totalOffer = order.offers.reduce((sum, offer) => sum + (offer.offerAmount || 0), 0);
+          itemOffer = (refundAmount / totalOrderItems) * totalOffer;
+        }
+        let itemShipping = 0;
+        if (order.shipping && order.items.length > 0) {
+          itemShipping = order.shipping / order.items.length;
+        }
+        refundAmount = Math.max(0, refundAmount - itemDiscount - itemOffer + itemShipping);
         wallet.balance += refundAmount;
         wallet.transactions.push({
           type: 'credit',
           amount: refundAmount,
-          description: `Refund for item in order ${order.orderNumber} (COD) - Refunded by admin`
+          description: `Refund for item in order ${order.orderNumber} (${order.paymentMethod.toUpperCase()}) - Refunded by admin`
         });
         await wallet.save();
       }
       item.itemPaymentStatus = paymentStatus;
     }
-
-    // If all items are delivered, set order.status = 'delivered'
+    // If all items are delivered, set order.status = 'delivered' (summary only)
     if (order.items.length > 0 && order.items.every(i => i.itemStatus === 'delivered')) {
       order.status = 'delivered';
     }
-
     await order.save();
     res.json({ message: 'Order item status/payment status updated', order });
   } catch (error) {
