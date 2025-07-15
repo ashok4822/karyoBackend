@@ -3,40 +3,6 @@ import bcrypt from "bcryptjs";
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt.js";
 import jwt from "jsonwebtoken";
 
-// export const adminLogin = async function (req, res) {
-//   console.log("request received");
-//   const { email, password } = req.body;
-//   try {
-//     const user = await User.findOne({ email, role: "admin" });
-//     if (!user) {
-//       return res
-//         .status(400)
-//         .json({ message: "Admin not found or not authorized" });
-//     }
-//     const isMatch = await bcrypt.compare(password, user.password);
-//     if (!isMatch) {
-//       return res.status(400).json({ message: "Invalid credentials" });
-//     }
-//     const accessToken = generateAccessToken(user);
-//     const refreshToken = generateRefreshToken(user);
-//     await User.updateOne({ _id: user._id }, { $set: { refreshToken } });
-//     const isProduction = process.env.NODE_ENV === "production";
-//     res.cookie("refreshToken", refreshToken, {
-//       httpOnly: true,
-//       secure: isProduction,
-//       sameSite: isProduction ? "Strict" : "Lax",
-//       path: '/admin'
-//     });
-//     res
-//       .status(200)
-//       .json({ user: { id: user.id, role: user.role }, token: accessToken });
-//   } catch (error) {
-//     res
-//       .status(500)
-//       .json({ message: `Internal Server Error: ${error.message}` });
-//   }
-// };
-
 export const adminLogin = async function (req, res) {
   console.log("request received");
   const { email, password } = req.body;
