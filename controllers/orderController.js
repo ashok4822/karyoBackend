@@ -621,161 +621,164 @@ export const checkCODAvailability = async (req, res) => {
 // Get all orders (admin)
 export const getAllOrders = async (req, res) => {
   try {
-    console.log('getAllOrders req.query:', req.query);
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const status = req.query.status; // optional filter
-    const search = req.query.search; // new search parameter
-    const date = req.query.date; // new date filter
-    const sortBy = req.query.sortBy || 'createdAt'; // sorting field
-    const sortOrder = req.query.sortOrder || 'desc'; // sorting direction
+    const status = req.query.status;
+    const search = req.query.search;
+    const date = req.query.date;
+    const dateFrom = req.query.dateFrom;
+    const dateTo = req.query.dateTo;
+    const sortBy = req.query.sortBy || 'createdAt';
+    const sortOrder = req.query.sortOrder || 'desc';
 
-    const query = {};
+    // Build match query
+    const match = {};
     if (status === 'returned') {
-      query.status = { $in: ['returned', 'return_verified'] };
+      match.status = { $in: ['returned', 'return_verified'] };
     } else if (status && status !== "all") {
-      query.status = status;
+      match.status = status;
     }
-
-    // Date filter (expects YYYY-MM-DD)
+    // Date filter
     if (date) {
       const start = new Date(date);
       const end = new Date(date);
       end.setHours(23, 59, 59, 999);
       start.setHours(0, 0, 0, 0);
-      query.createdAt = { $gte: start, $lte: end };
+      match.createdAt = { $gte: start, $lte: end };
+    } else if (dateFrom && dateTo) {
+      const start = new Date(dateFrom);
+      const end = new Date(dateTo);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      match.createdAt = { $gte: start, $lte: end };
+    } else if (dateFrom) {
+      const start = new Date(dateFrom);
+      start.setHours(0, 0, 0, 0);
+      match.createdAt = { $gte: start };
+    } else if (dateTo) {
+      const end = new Date(dateTo);
+      end.setHours(23, 59, 59, 999);
+      match.createdAt = { $lte: end };
     }
 
-    // We'll do all search filtering in memory after population
-    // This allows us to search across order numbers, customer names, and product names
-    const searchTerm = search && search.trim() !== "" ? search.trim() : null;
-    if (searchTerm) {
-      console.log('Search term:', searchTerm);
-    }
-
-    // Count total (with search)
-    let total;
-    // Build sort object
-    const sortObject = {};
-    sortObject[sortBy] = sortOrder === 'asc' ? 1 : -1;
-    
-    console.log('Order query:', JSON.stringify(query, null, 2));
-    console.log('Sort object:', JSON.stringify(sortObject, null, 2));
-    
-    let ordersQuery = Order.find(query)
-      .populate({
-        path: "user",
-        select: "username firstName lastName email",
-      })
-      .populate({
-        path: "items.productVariantId",
-        populate: {
-          path: "product",
-          select: "name brand mainImage",
+    // Aggregation pipeline
+    const pipeline = [
+      { $match: match },
+      // Lookup user
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'user',
+          foreignField: '_id',
+          as: 'user',
         },
-      })
-      .sort(sortObject)
-      .skip((page - 1) * limit)
-      .limit(limit);
+      },
+      { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+      // Lookup productVariant and product for each item
+      {
+        $lookup: {
+          from: 'productvariants',
+          localField: 'items.productVariantId',
+          foreignField: '_id',
+          as: 'variants',
+        },
+      },
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'variants.product',
+          foreignField: '_id',
+          as: 'products',
+        },
+      },
+    ];
 
-    let orders = await ordersQuery;
-    
-    // Debug: Check total orders in database
-    const totalOrdersInDB = await Order.countDocuments({});
-    console.log('Total orders in database:', totalOrdersInDB);
-
-    // If searching, we need to fetch all orders and filter them
-    if (searchTerm) {
-      console.log('Searching for:', searchTerm);
-      
-      // Fetch all orders without pagination for search
-      const allOrdersQuery = Order.find(query)
-        .populate({
-          path: "user",
-          select: "username firstName lastName email",
-        })
-        .populate({
-          path: "items.productVariantId",
-          populate: {
-            path: "product",
-            select: "name brand mainImage",
-          },
-        })
-        .sort(sortObject);
-      
-      const allOrders = await allOrdersQuery;
-      console.log('Total orders fetched for search:', allOrders.length);
-      
-      if (allOrders.length > 0) {
-        console.log('Sample order structure:', JSON.stringify(allOrders[0], null, 2));
-      }
-      
-      // Filter all orders
-      const filteredOrders = allOrders.filter(order => {
-        const term = searchTerm.toLowerCase();
-        
-        // Check orderNumber match
-        if (order.orderNumber && order.orderNumber.toLowerCase().includes(term)) {
-          console.log('Match found by orderNumber:', order.orderNumber);
-          return true;
-        }
-        
-        // Check user fields
-        if (order.user) {
-          const { firstName, lastName, username, email } = order.user;
-          const fullName = `${firstName || ""} ${lastName || ""}`.trim().toLowerCase();
-          if (
-            (firstName && firstName.toLowerCase().includes(term)) ||
-            (lastName && lastName.toLowerCase().includes(term)) ||
-            (fullName && fullName.includes(term)) ||
-            (username && username.toLowerCase().includes(term)) ||
-            (email && email.toLowerCase().includes(term))
-          ) {
-            console.log('Match found by user:', fullName, email);
-            return true;
-          }
-        }
-        
-        // Check product names
-        if (order.items && order.items.length > 0) {
-          const productMatch = order.items.some(item => {
-            const product = item.productVariantId?.product;
-            if (product && product.name) {
-              const matches = product.name.toLowerCase().includes(term);
-              if (matches) {
-                console.log('Match found by product:', product.name);
-              }
-              return matches;
-            }
-            return false;
-          });
-          if (productMatch) return true;
-        }
-        
-        return false;
+    // Search filter
+    if (search && search.trim() !== "") {
+      const term = search.trim();
+      const regex = new RegExp(term, "i");
+      pipeline.push({
+        $match: {
+          $or: [
+            { orderNumber: { $regex: regex } },
+            { 'user.firstName': { $regex: regex } },
+            { 'user.lastName': { $regex: regex } },
+            { 'user.username': { $regex: regex } },
+            { 'user.email': { $regex: regex } },
+            { 'products.name': { $regex: regex } },
+          ],
+        },
       });
-      
-      console.log('Total orders after filter:', filteredOrders.length);
-      
-      // Calculate pagination for filtered results
-      total = filteredOrders.length;
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
-      orders = filteredOrders.slice(startIndex, endIndex);
-      
-      console.log(`Showing orders ${startIndex + 1} to ${Math.min(endIndex, total)} of ${total}`);
-    } else {
-      total = await Order.countDocuments(query);
     }
+
+    // Sorting
+    const sortObj = {};
+    sortObj[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    pipeline.push({ $sort: sortObj });
+
+    // Facet for pagination and summary
+    pipeline.push({
+      $facet: {
+        paginated: [
+          { $skip: (page - 1) * limit },
+          { $limit: limit },
+        ],
+        summary: [
+          {
+            $group: {
+              _id: null,
+              salesCount: { $sum: 1 },
+              orderAmount: { $sum: "$total" },
+              discount: {
+                $sum: {
+                  $cond: [
+                    { $in: [ { $type: "$discount" }, ["double", "int"] ] },
+                    "$discount",
+                    {
+                      $cond: [
+                        { $and: [
+                          { $eq: [ { $type: "$discount" }, "object" ] },
+                          { $ifNull: [ "$discount.discountAmount", false ] }
+                        ] },
+                        "$discount.discountAmount",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+            },
+          },
+        ],
+        totalCount: [
+          { $count: "count" },
+        ],
+      },
+    });
+
+    // Unwind results
+    pipeline.push(
+      { $unwind: { path: "$summary", preserveNullAndEmptyArrays: true } },
+    );
+
+    // Run aggregation
+    const result = await Order.aggregate(pipeline);
+    const paginated = result[0]?.paginated || [];
+    const summary = result[0]?.summary || { salesCount: 0, orderAmount: 0, discount: 0 };
+    const total = result[0]?.totalCount?.[0]?.count || 0;
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    // Hydrate user and items for frontend compatibility
+    // (If needed, you can re-populate here, or adjust frontend to use the new structure)
 
     res.json({
-      orders,
+      orders: paginated,
       total,
       page,
-      totalPages: Math.ceil(total / limit),
+      totalPages,
+      summary,
     });
   } catch (error) {
-    // console.error("Error getting all orders:", error);
     res.status(500).json({ message: `Internal Server Error: ${error.message}` });
   }
 };
