@@ -120,6 +120,28 @@ export const addCoupon = async (req, res) => {
     if (new Date(validFrom) >= new Date(validTo)) {
       return res.status(400).json({ message: "Valid to date must be after valid from date" });
     }
+    if (
+      minimumAmount !== undefined &&
+      minimumAmount !== null &&
+      parseFloat(minimumAmount) > 0 &&
+      parseFloat(discountValue) > parseFloat(minimumAmount)
+    ) {
+      return res.status(400).json({ message: "Discount value cannot be greater than minimum amount" });
+    }
+    // Maximum discount validation
+    if (discountType === "fixed" && maximumDiscount !== undefined && maximumDiscount !== null && maximumDiscount !== "") {
+      if (parseFloat(maximumDiscount) < parseFloat(discountValue)) {
+        return res.status(400).json({ message: "Maximum discount cannot be less than discount value for fixed coupons" });
+      }
+    }
+    if (discountType === "percentage" && maximumDiscount !== undefined && maximumDiscount !== null && maximumDiscount !== "") {
+      if (parseFloat(maximumDiscount) <= 0) {
+        return res.status(400).json({ message: "Maximum discount must be greater than 0 for percentage coupons" });
+      }
+      if (minimumAmount !== undefined && minimumAmount !== null && parseFloat(minimumAmount) > 0 && parseFloat(maximumDiscount) > parseFloat(minimumAmount)) {
+        return res.status(400).json({ message: "Maximum discount cannot be greater than minimum amount for percentage coupons" });
+      }
+    }
     // Check for duplicate code
     const existing = await Coupon.findOne({ code: code.trim().toUpperCase(), isDeleted: false });
     if (existing) {
@@ -181,6 +203,28 @@ export const editCoupon = async (req, res) => {
     }
     if (validFrom && validTo && new Date(validFrom) >= new Date(validTo)) {
       return res.status(400).json({ message: "Valid to date must be after valid from date" });
+    }
+    if (
+      minimumAmount !== undefined &&
+      minimumAmount !== null &&
+      parseFloat(minimumAmount) > 0 &&
+      parseFloat(discountValue) > parseFloat(minimumAmount)
+    ) {
+      return res.status(400).json({ message: "Discount value cannot be greater than minimum amount" });
+    }
+    // Maximum discount validation
+    if (discountType === "fixed" && maximumDiscount !== undefined && maximumDiscount !== null && maximumDiscount !== "") {
+      if (parseFloat(maximumDiscount) < parseFloat(discountValue)) {
+        return res.status(400).json({ message: "Maximum discount cannot be less than discount value for fixed coupons" });
+      }
+    }
+    if (discountType === "percentage" && maximumDiscount !== undefined && maximumDiscount !== null && maximumDiscount !== "") {
+      if (parseFloat(maximumDiscount) <= 0) {
+        return res.status(400).json({ message: "Maximum discount must be greater than 0 for percentage coupons" });
+      }
+      if (minimumAmount !== undefined && minimumAmount !== null && parseFloat(minimumAmount) > 0 && parseFloat(maximumDiscount) > parseFloat(minimumAmount)) {
+        return res.status(400).json({ message: "Maximum discount cannot be greater than minimum amount for percentage coupons" });
+      }
     }
     // Update fields
     if (code !== undefined) coupon.code = code.trim().toUpperCase();
