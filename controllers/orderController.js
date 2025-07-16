@@ -150,35 +150,58 @@ export const createOrder = async (req, res) => {
       }
     }
 
-    // Create the order
-    console.log("Received offers in order:", offers);
+    // Accept paymentStatus from frontend if provided (for online payments)
+    let incomingPaymentStatus = req.body.paymentStatus;
+    const razorpayOrderId = req.body.razorpayOrderId;
+    let finalPaymentStatus;
+    if (paymentMethod === "online") {
+      if (!razorpayOrderId) {
+        return res.status(400).json({ message: "razorpayOrderId is required for online payments" });
+      }
+      // Idempotency: check if order already exists for this user and razorpayOrderId
+      const existingOrder = await Order.findOne({ user: req.user.userId, razorpayOrderId });
+      if (existingOrder) {
+        return res.status(200).json({ message: "Order already exists for this payment attempt", order: existingOrder });
+      }
+      if (incomingPaymentStatus === "failed") {
+        finalPaymentStatus = "failed";
+      } else {
+        finalPaymentStatus = "paid";
+      }
+    } else {
+      finalPaymentStatus = "pending";
+    }
+
     // Set per-item payment status for online payments
     const itemsWithPaymentStatus = items.map(item => ({
       ...item,
-      itemPaymentStatus: paymentMethod === "online" ? "paid" : "pending"
+      itemPaymentStatus: finalPaymentStatus === "paid" ? "paid" : (finalPaymentStatus === "failed" ? "failed" : "pending")
     }));
     const order = new Order({
       user: req.user.userId,
       items: itemsWithPaymentStatus,
       shippingAddress,
       paymentMethod,
+      razorpayOrderId: paymentMethod === "online" ? razorpayOrderId : undefined,
       subtotal,
       subtotalAfterDiscount,
       discount,
       offers, // <-- this is now included
       shipping,
       total,
-      paymentStatus: paymentMethod === "online" ? "paid" : "pending",
+      paymentStatus: finalPaymentStatus,
     });
     await order.save();
     console.log("Saved order offers:", order.offers);
 
-    // Decrement stock for each ordered product variant
-    for (const item of items) {
-      await mongoose.model("ProductVariant").findByIdAndUpdate(
-        item.productVariantId,
-        { $inc: { stock: -item.quantity } }
-      );
+    // Decrement stock for each ordered product variant ONLY if paymentStatus is 'paid'
+    if (finalPaymentStatus === "paid") {
+      for (const item of items) {
+        await mongoose.model("ProductVariant").findByIdAndUpdate(
+          item.productVariantId,
+          { $inc: { stock: -item.quantity } }
+        );
+      }
     }
 
     // Populate product details for response
@@ -831,6 +854,42 @@ export const updatePaymentStatus = async (req, res) => {
       message: "Payment status updated successfully", 
       order 
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Update online payment status
+export const updateOnlinePaymentStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { paymentStatus } = req.body;
+    const order = await Order.findById(id);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+    if (order.paymentMethod !== "online") {
+      return res.status(400).json({ message: "Only online payment orders can be updated here" });
+    }
+    if (order.paymentStatus !== "failed") {
+      return res.status(400).json({ message: "Only failed payment orders can be retried" });
+    }
+    if (paymentStatus !== "paid") {
+      return res.status(400).json({ message: "Can only update paymentStatus to 'paid'" });
+    }
+    // Decrement stock if not already decremented
+    for (const item of order.items) {
+      if (item.itemPaymentStatus !== "paid") {
+        await mongoose.model("ProductVariant").findByIdAndUpdate(
+          item.productVariantId,
+          { $inc: { stock: -item.quantity } }
+        );
+        item.itemPaymentStatus = "paid";
+      }
+    }
+    order.paymentStatus = "paid";
+    await order.save();
+    res.json({ message: "Payment status updated to paid", order });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

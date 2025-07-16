@@ -97,6 +97,10 @@ const orderSchema = new mongoose.Schema({
     enum: ["cod", "online"],
     required: true,
   },
+  razorpayOrderId: {
+    type: String,
+    index: true,
+  },
   transactionId: {
     type: String,
     default: "",
