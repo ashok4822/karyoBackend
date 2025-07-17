@@ -76,6 +76,57 @@ export const createOffer = async (req, res) => {
       }
     }
 
+    // --- Offer Discount Validation ---
+    if (minimumAmount !== undefined && minimumAmount !== null && parseFloat(minimumAmount) > 0 && parseFloat(discountValue) >= parseFloat(minimumAmount)) {
+      return res.status(statusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Discount value must be less than minimum amount",
+      });
+    }
+    if (discountType === "percentage") {
+      if (parseFloat(discountValue) < 0 || parseFloat(discountValue) > 100) {
+        return res.status(statusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "Percentage discount must be between 0 and 100",
+        });
+      }
+      if (maximumDiscount === undefined || maximumDiscount === null || maximumDiscount === "") {
+        return res.status(statusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "Maximum discount is required for percentage offers",
+        });
+      }
+      if (parseFloat(maximumDiscount) <= parseFloat(discountValue)) {
+        return res.status(statusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "Maximum discount must be greater than discount value",
+        });
+      }
+      if (minimumAmount !== undefined && minimumAmount !== null && parseFloat(minimumAmount) > 0 && parseFloat(maximumDiscount) >= parseFloat(minimumAmount)) {
+        return res.status(statusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "Maximum discount must be less than minimum amount",
+        });
+      }
+    }
+    if (discountType === "fixed") {
+      if (maximumDiscount !== undefined && maximumDiscount !== null && maximumDiscount !== "") {
+        if (parseFloat(maximumDiscount) < parseFloat(discountValue)) {
+          return res.status(statusCodes.BAD_REQUEST).json({
+            success: false,
+            message: "Maximum discount cannot be less than discount value for fixed offers",
+          });
+        }
+        if (minimumAmount !== undefined && minimumAmount !== null && parseFloat(minimumAmount) > 0 && parseFloat(maximumDiscount) >= parseFloat(minimumAmount)) {
+          return res.status(statusCodes.BAD_REQUEST).json({
+            success: false,
+            message: "Maximum discount must be less than minimum amount",
+          });
+        }
+      }
+    }
+    // --- End Offer Discount Validation ---
+
     const offer = new Offer({
       name,
       description,
