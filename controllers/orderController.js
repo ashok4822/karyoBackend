@@ -487,7 +487,7 @@ export const cancelOrder = async (req, res) => {
         order.cancellationReason = reason || "";
       }
       // Refund for partial cancellation in online payment orders
-      if (order.paymentMethod === "online") {
+      if (order.paymentMethod === "online" && ["paid", "pending"].includes(order.paymentStatus)) {
         const Wallet = mongoose.model('Wallet');
         let wallet = await Wallet.findOne({ user: order.user });
         if (!wallet) {
@@ -560,7 +560,7 @@ export const cancelOrder = async (req, res) => {
       }
     }
     // Refund for online payment
-    if (order.paymentMethod === "online" && order.paymentStatus !== "refunded") {
+    if (order.paymentMethod === "online" && ["paid", "pending"].includes(order.paymentStatus) && order.paymentStatus !== "refunded") {
       const Wallet = mongoose.model('Wallet');
       let wallet = await Wallet.findOne({ user: order.user });
       if (!wallet) {
