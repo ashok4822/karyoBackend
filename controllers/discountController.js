@@ -66,6 +66,7 @@ export const listDiscounts = async (req, res) => {
 // Add new discount
 export const addDiscount = async (req, res) => {
   try {
+    console.log("[addDiscount] Incoming request body:", req.body); // Log incoming data
     const {
       name,
       description,
@@ -78,6 +79,7 @@ export const addDiscount = async (req, res) => {
       status,
       maxUsage,
       maxUsagePerUser,
+      code, // log code as well
     } = req.body;
 
     // Validation
@@ -115,6 +117,22 @@ export const addDiscount = async (req, res) => {
       });
     }
 
+    if (maximumDiscount !== undefined && maximumDiscount !== null && maximumDiscount !== "") {
+      const maxDisc = parseFloat(maximumDiscount);
+      const minAmt = minimumAmount ? parseFloat(minimumAmount) : 0;
+      const discVal = parseFloat(discountValue);
+      if (maxDisc > minAmt) {
+        return res.status(400).json({
+          message: "Maximum discount cannot be greater than minimum amount."
+        });
+      }
+      if (maxDisc <= discVal) {
+        return res.status(400).json({
+          message: "Maximum discount must be greater than discount value."
+        });
+      }
+    }
+
     // Check if discount name already exists (excluding deleted ones)
     const existingDiscount = await Discount.findOne({
       name: { $regex: `^${name}$`, $options: "i" },
@@ -140,6 +158,7 @@ export const addDiscount = async (req, res) => {
 
     // Create new discount
     const discount = new Discount({
+      code: code.trim().toUpperCase(), // <-- Ensure code is saved and uppercased
       name,
       description,
       discountType,
@@ -164,7 +183,10 @@ export const addDiscount = async (req, res) => {
       discount: discountWithVirtuals,
     });
   } catch (error) {
-    console.error("Error adding discount:", error);
+    console.error("[addDiscount] Error adding discount:", error);
+    if (error.stack) {
+      console.error("[addDiscount] Stack trace:", error.stack);
+    }
     res
       .status(500)
       .json({ message: `Internal Server Error: ${error.message}` });
