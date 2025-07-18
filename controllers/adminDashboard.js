@@ -1,22 +1,263 @@
-// Mock dashboard data
-const dashboardData = {
-  totalSales: 12345,
-  totalOrders: 120,
-  totalProducts: 58,
-  totalCustomers: 34,
-  salesGrowth: 12,
-  orderGrowth: 8,
-  recentOrders: [
-    { id: 1, customer: "John Doe", amount: 250, status: "completed" },
-    { id: 2, customer: "Jane Smith", amount: 120, status: "pending" },
-    { id: 3, customer: "Alice Brown", amount: 90, status: "cancelled" },
-  ],
-  lowStockProducts: [
-    { id: 1, name: "Product A", stock: 3, maxStock: 50 },
-    { id: 2, name: "Product B", stock: 7, maxStock: 40 },
-  ],
-};
+import Order from "../models/orderModel.js";
+import Product from "../models/productModel.js";
+import Category from "../models/categoryModel.js";
+import mongoose from "mongoose";
+import User from "../models/userModel.js";
 
-export const getDashboard = (req, res) => {
-  res.json(dashboardData);
+// Helper: get start/end of current and previous period
+function getPeriodRange(period) {
+  const now = new Date();
+  let start, end, prevStart, prevEnd;
+  if (period === "yearly") {
+    start = new Date(now.getFullYear(), 0, 1);
+    end = new Date(now.getFullYear() + 1, 0, 1);
+    prevStart = new Date(now.getFullYear() - 1, 0, 1);
+    prevEnd = new Date(now.getFullYear(), 0, 1);
+  } else if (period === "weekly") {
+    // Get Monday of current week
+    const day = now.getDay();
+    const diffToMonday = (day === 0 ? -6 : 1) - day; // Sunday=0, Monday=1
+    start = new Date(now);
+    start.setDate(now.getDate() + diffToMonday);
+    start.setHours(0, 0, 0, 0);
+    end = new Date(start);
+    end.setDate(start.getDate() + 7);
+    prevStart = new Date(start);
+    prevStart.setDate(start.getDate() - 7);
+    prevEnd = new Date(start);
+  } else {
+    // monthly
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    prevEnd = new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+  return { start, end, prevStart, prevEnd };
+}
+
+export const getDashboard = async (req, res) => {
+  try {
+    const period = req.query.period === "yearly" ? "yearly" : req.query.period === "weekly" ? "weekly" : "monthly";
+    const { start, end, prevStart, prevEnd } = getPeriodRange(period);
+
+    // Total sales, orders, products, customers
+    const [
+      totalSales,
+      totalOrders,
+      totalProducts,
+      totalCustomers,
+      recentOrders,
+      lowStockProducts,
+      // For growth
+      periodSales,
+      prevPeriodSales,
+      periodOrders,
+      prevPeriodOrders,
+      // For best selling
+      bestSellingProducts,
+      bestSellingCategories,
+      bestSellingBrands,
+      // For chart
+      chartData
+    ] = await Promise.all([
+      // Total sales (paid orders only)
+      Order.aggregate([
+        { $match: { paymentStatus: "paid" } },
+        { $group: { _id: null, total: { $sum: "$total" } } },
+      ]),
+      // Total orders
+      Order.countDocuments({}),
+      // Total products
+      Product.countDocuments({ isDeleted: false }),
+      // Total customers
+      User.countDocuments({ role: "user" }),
+      // Recent orders (last 10)
+      Order.find({})
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .populate({
+          path: "user",
+          select: "username firstName lastName email",
+        })
+        .select("orderNumber total status createdAt user"),
+      // Low stock products (stock < 10)
+      Product.aggregate([
+        { $lookup: {
+            from: "productvariants",
+            localField: "variants",
+            foreignField: "_id",
+            as: "variantDetails"
+        }},
+        { $unwind: "$variantDetails" },
+        { $match: { "variantDetails.stock": { $lt: 10 } } },
+        { $project: {
+            name: 1,
+            brand: 1,
+            variant: "$variantDetails._id",
+            stock: "$variantDetails.stock",
+            maxStock: "$variantDetails.maxStock"
+        }},
+        { $limit: 10 }
+      ]),
+      // Sales in current period
+      Order.aggregate([
+        { $match: { paymentStatus: "paid", createdAt: { $gte: start, $lt: end } } },
+        { $group: { _id: null, total: { $sum: "$total" } } },
+      ]),
+      // Sales in previous period
+      Order.aggregate([
+        { $match: { paymentStatus: "paid", createdAt: { $gte: prevStart, $lt: prevEnd } } },
+        { $group: { _id: null, total: { $sum: "$total" } } },
+      ]),
+      // Orders in current period
+      Order.countDocuments({ createdAt: { $gte: start, $lt: end } }),
+      // Orders in previous period
+      Order.countDocuments({ createdAt: { $gte: prevStart, $lt: prevEnd } }),
+      // Best selling products (top 10 by quantity)
+      Order.aggregate([
+        { $unwind: "$items" },
+        { $match: { paymentStatus: "paid" } },
+        { $group: {
+          _id: "$items.productVariantId",
+          quantity: { $sum: "$items.quantity" },
+        }},
+        { $sort: { quantity: -1 } },
+        { $limit: 10 },
+        { $lookup: {
+          from: "productvariants",
+          localField: "_id",
+          foreignField: "_id",
+          as: "variant"
+        }},
+        { $unwind: "$variant" },
+        { $lookup: {
+          from: "products",
+          localField: "variant.product",
+          foreignField: "_id",
+          as: "product"
+        }},
+        { $unwind: "$product" },
+        { $project: {
+          _id: 0,
+          productId: "$product._id",
+          productName: "$product.name",
+          brand: "$product.brand",
+          variantId: "$variant._id",
+          variant: "$variant",
+          quantity: 1
+        }}
+      ]),
+      // Best selling categories (top 10 by quantity)
+      Order.aggregate([
+        { $unwind: "$items" },
+        { $match: { paymentStatus: "paid" } },
+        { $lookup: {
+          from: "productvariants",
+          localField: "items.productVariantId",
+          foreignField: "_id",
+          as: "variant"
+        }},
+        { $unwind: "$variant" },
+        { $lookup: {
+          from: "products",
+          localField: "variant.product",
+          foreignField: "_id",
+          as: "product"
+        }},
+        { $unwind: "$product" },
+        { $group: {
+          _id: "$product.category",
+          quantity: { $sum: "$items.quantity" },
+        }},
+        { $sort: { quantity: -1 } },
+        { $limit: 10 },
+        { $lookup: {
+          from: "categories",
+          localField: "_id",
+          foreignField: "_id",
+          as: "category"
+        }},
+        { $unwind: "$category" },
+        { $project: {
+          _id: 0,
+          categoryId: "$category._id",
+          categoryName: "$category.name",
+          quantity: 1
+        }}
+      ]),
+      // Best selling brands (top 10 by quantity)
+      Order.aggregate([
+        { $unwind: "$items" },
+        { $match: { paymentStatus: "paid" } },
+        { $lookup: {
+          from: "productvariants",
+          localField: "items.productVariantId",
+          foreignField: "_id",
+          as: "variant"
+        }},
+        { $unwind: "$variant" },
+        { $lookup: {
+          from: "products",
+          localField: "variant.product",
+          foreignField: "_id",
+          as: "product"
+        }},
+        { $unwind: "$product" },
+        { $group: {
+          _id: "$product.brand",
+          quantity: { $sum: "$items.quantity" },
+        }},
+        { $sort: { quantity: -1 } },
+        { $limit: 10 },
+        { $project: {
+          _id: 0,
+          brand: "$_id",
+          quantity: 1
+        }}
+      ]),
+      // Chart data (sales/orders by month/year/week)
+      Order.aggregate([
+        { $match: { paymentStatus: "paid", createdAt: { $gte: start, $lt: end } } },
+        { $group: {
+          _id: period === "yearly"
+            ? { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } }
+            : period === "weekly"
+            ? { day: { $dayOfMonth: "$createdAt" }, month: { $month: "$createdAt" }, year: { $year: "$createdAt" } }
+            : { day: { $dayOfMonth: "$createdAt" }, month: { $month: "$createdAt" }, year: { $year: "$createdAt" } },
+          totalSales: { $sum: "$total" },
+          orderCount: { $sum: 1 },
+        }},
+        { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1 } }
+      ])
+    ]);
+
+    // Calculate growth
+    const salesGrowth = periodSales[0]?.total && prevPeriodSales[0]?.total
+      ? ((periodSales[0].total - prevPeriodSales[0].total) / (prevPeriodSales[0].total || 1)) * 100
+      : 0;
+    const orderGrowth = periodOrders && prevPeriodOrders
+      ? ((periodOrders - prevPeriodOrders) / (prevPeriodOrders || 1)) * 100
+      : 0;
+
+    res.json({
+      success: true,
+      data: {
+        totalSales: totalSales[0]?.total || 0,
+        totalOrders,
+        totalProducts,
+        totalCustomers,
+        salesGrowth: Math.round(salesGrowth),
+        orderGrowth: Math.round(orderGrowth),
+        recentOrders,
+        lowStockProducts,
+        chartData,
+        bestSellingProducts,
+        bestSellingCategories,
+        bestSellingBrands,
+      },
+    });
+  } catch (error) {
+    console.error("Dashboard analytics error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 };
