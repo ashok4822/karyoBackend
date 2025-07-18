@@ -45,22 +45,37 @@ import { verifyAdmin } from "../middleware/authMiddleware.js";
 import fs from "fs";
 import path from "path";
 import { getDashboard } from "../controllers/adminDashboard.js";
-import { getAllOrders, getOrderByIdForAdmin, updateOrderStatus, updatePaymentStatus, deleteOrder, verifyReturnRequest, rejectReturnRequest, verifyReturnWithoutRefund, updateOrderItemStatus } from "../controllers/orderController.js";
-import { listCoupons, addCoupon, editCoupon, deleteCoupon, restoreCoupon, triggerExpiredCouponUpdate } from "../controllers/couponController.js";
-import { 
-  getOffers as listOffers, 
-  createOffer as addOffer, 
-  getOfferById, 
-  updateOffer as editOffer, 
-  deleteOffer, 
+import {
+  getAllOrders,
+  getOrderByIdForAdmin,
+  updateOrderStatus,
+  updatePaymentStatus,
+  deleteOrder,
+  verifyReturnRequest,
+  rejectReturnRequest,
+  verifyReturnWithoutRefund,
+  updateOrderItemStatus,
+} from "../controllers/orderController.js";
+import {
+  listCoupons,
+  addCoupon,
+  editCoupon,
+  deleteCoupon,
+  restoreCoupon,
+  triggerExpiredCouponUpdate,
+} from "../controllers/couponController.js";
+import {
+  getOffers as listOffers,
+  createOffer as addOffer,
+  getOfferById,
+  updateOffer as editOffer,
+  deleteOffer,
   toggleOfferStatus,
   getBestOfferForProduct,
   getOffersByCategory,
-  getOffersByProducts
+  getOffersByProducts,
 } from "../controllers/offerController.js";
-import { 
-  getAllReferrals as listReferrals 
-} from "../controllers/referralController.js";
+import { getAllReferrals as listReferrals } from "../controllers/referralController.js";
 
 const router = express.Router();
 
@@ -207,24 +222,59 @@ router.post("/refresh-token", adminRefreshToken);
 router.get("/discounts", verifyToken, isAdmin, listDiscounts);
 router.post("/discounts", verifyToken, isAdmin, addDiscount);
 router.get("/discounts/active/all", verifyAdmin, getActiveDiscounts);
-router.get("/discounts/usage-stats", verifyToken, isAdmin, getAllDiscountUsageStats);
+router.get(
+  "/discounts/usage-stats",
+  verifyToken,
+  isAdmin,
+  getAllDiscountUsageStats
+);
 router.get("/discounts/:id", verifyToken, isAdmin, getDiscountById);
 router.put("/discounts/:id", verifyToken, isAdmin, editDiscount);
 router.delete("/discounts/:id", verifyToken, isAdmin, deleteDiscount);
 router.patch("/discounts/:id/restore", verifyToken, isAdmin, restoreDiscount);
 router.patch("/discounts/:id/usage", verifyAdmin, updateDiscountUsage);
-router.get("/discounts/:discountId/user-usage", verifyToken, isAdmin, getUserDiscountUsage);
+router.get(
+  "/discounts/:discountId/user-usage",
+  verifyToken,
+  isAdmin,
+  getUserDiscountUsage
+);
 
 router.get("/orders", verifyToken, isAdmin, getAllOrders);
 router.get("/orders/:id", verifyToken, isAdmin, getOrderByIdForAdmin);
 router.put("/orders/:id/status", verifyToken, isAdmin, updateOrderStatus);
-router.put("/orders/:id/payment-status", verifyToken, isAdmin, updatePaymentStatus);
+router.put(
+  "/orders/:id/payment-status",
+  verifyToken,
+  isAdmin,
+  updatePaymentStatus
+);
 router.delete("/orders/:id", verifyToken, isAdmin, deleteOrder);
-router.put("/orders/:id/verify-return", verifyToken, isAdmin, verifyReturnRequest);
-router.put("/orders/:id/verify-return-no-refund", verifyToken, isAdmin, verifyReturnWithoutRefund);
-router.put("/orders/:id/reject-return", verifyToken, isAdmin, rejectReturnRequest);
+router.put(
+  "/orders/:id/verify-return",
+  verifyToken,
+  isAdmin,
+  verifyReturnRequest
+);
+router.put(
+  "/orders/:id/verify-return-no-refund",
+  verifyToken,
+  isAdmin,
+  verifyReturnWithoutRefund
+);
+router.put(
+  "/orders/:id/reject-return",
+  verifyToken,
+  isAdmin,
+  rejectReturnRequest
+);
 // Per-item status update
-router.put("/orders/:orderId/items/:itemId/status", verifyToken, isAdmin, updateOrderItemStatus);
+router.put(
+  "/orders/:orderId/items/:itemId/status",
+  verifyToken,
+  isAdmin,
+  updateOrderItemStatus
+);
 
 // Coupon routes
 router.get("/coupons", verifyToken, isAdmin, listCoupons);
@@ -232,7 +282,12 @@ router.post("/coupons", verifyToken, isAdmin, addCoupon);
 router.put("/coupons/:id", verifyToken, isAdmin, editCoupon);
 router.delete("/coupons/:id", verifyToken, isAdmin, deleteCoupon);
 router.patch("/coupons/:id/restore", verifyToken, isAdmin, restoreCoupon);
-router.post("/coupons/update-expired", verifyToken, isAdmin, triggerExpiredCouponUpdate);
+router.post(
+  "/coupons/update-expired",
+  verifyToken,
+  isAdmin,
+  triggerExpiredCouponUpdate
+);
 
 // Test route
 router.get("/test", (req, res) => {
@@ -242,8 +297,18 @@ router.get("/test", (req, res) => {
 // Offer routes
 router.get("/offers", verifyToken, isAdmin, listOffers);
 router.post("/offers", verifyToken, isAdmin, addOffer);
-router.get("/offers/product/:productId", verifyToken, isAdmin, getBestOfferForProduct);
-router.get("/offers/category/:categoryId", verifyToken, isAdmin, getOffersByCategory);
+router.get(
+  "/offers/product/:productId",
+  verifyToken,
+  isAdmin,
+  getBestOfferForProduct
+);
+router.get(
+  "/offers/category/:categoryId",
+  verifyToken,
+  isAdmin,
+  getOffersByCategory
+);
 router.post("/offers/products", verifyToken, isAdmin, getOffersByProducts);
 router.patch("/offers/:id/status", verifyToken, isAdmin, toggleOfferStatus);
 router.get("/offers/:id", verifyToken, isAdmin, getOfferById);

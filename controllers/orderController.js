@@ -116,7 +116,7 @@ export const createOrder = async (req, res) => {
       if (discountDoc.usageCount !== undefined) {
         // Use findByIdAndUpdate instead of save() to avoid validation issues
         await Discount.findByIdAndUpdate(discount.discountId, {
-          $inc: { usageCount: 1 }
+          $inc: { usageCount: 1 },
         });
       }
       // Update user-specific usage count
@@ -156,12 +156,22 @@ export const createOrder = async (req, res) => {
     let finalPaymentStatus;
     if (paymentMethod === "online") {
       if (!razorpayOrderId) {
-        return res.status(400).json({ message: "razorpayOrderId is required for online payments" });
+        return res
+          .status(400)
+          .json({ message: "razorpayOrderId is required for online payments" });
       }
       // Idempotency: check if order already exists for this user and razorpayOrderId
-      const existingOrder = await Order.findOne({ user: req.user.userId, razorpayOrderId });
+      const existingOrder = await Order.findOne({
+        user: req.user.userId,
+        razorpayOrderId,
+      });
       if (existingOrder) {
-        return res.status(200).json({ message: "Order already exists for this payment attempt", order: existingOrder });
+        return res
+          .status(200)
+          .json({
+            message: "Order already exists for this payment attempt",
+            order: existingOrder,
+          });
       }
       if (incomingPaymentStatus === "failed") {
         finalPaymentStatus = "failed";
@@ -173,9 +183,14 @@ export const createOrder = async (req, res) => {
     }
 
     // Set per-item payment status for online payments
-    const itemsWithPaymentStatus = items.map(item => ({
+    const itemsWithPaymentStatus = items.map((item) => ({
       ...item,
-      itemPaymentStatus: finalPaymentStatus === "paid" ? "paid" : (finalPaymentStatus === "failed" ? "failed" : "pending")
+      itemPaymentStatus:
+        finalPaymentStatus === "paid"
+          ? "paid"
+          : finalPaymentStatus === "failed"
+          ? "failed"
+          : "pending",
     }));
     const order = new Order({
       user: req.user.userId,
@@ -197,10 +212,11 @@ export const createOrder = async (req, res) => {
     // Decrement stock for each ordered product variant ONLY if paymentStatus is 'paid'
     if (finalPaymentStatus === "paid") {
       for (const item of items) {
-        await mongoose.model("ProductVariant").findByIdAndUpdate(
-          item.productVariantId,
-          { $inc: { stock: -item.quantity } }
-        );
+        await mongoose
+          .model("ProductVariant")
+          .findByIdAndUpdate(item.productVariantId, {
+            $inc: { stock: -item.quantity },
+          });
       }
     }
 
@@ -271,16 +287,23 @@ export const createRazorpayOrder = async (req, res) => {
     const order = await razorpay.orders.create(options);
     res.status(201).json({ order });
   } catch (error) {
-    res.status(500).json({ message: "Failed to create Razorpay order", error: error.message });
+    res
+      .status(500)
+      .json({
+        message: "Failed to create Razorpay order",
+        error: error.message,
+      });
   }
 };
 
 // Verify Razorpay payment signature
 export const verifyRazorpayPayment = async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+      req.body;
     const sign = `${razorpay_order_id}|${razorpay_payment_id}`;
-    const expectedSignature = crypto.createHmac("sha256", process.env.RAZOR_SECRET_ID)
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZOR_SECRET_ID)
       .update(sign)
       .digest("hex");
     if (expectedSignature === razorpay_signature) {
@@ -289,7 +312,9 @@ export const verifyRazorpayPayment = async (req, res) => {
       res.status(400).json({ success: false, message: "Invalid signature" });
     }
   } catch (error) {
-    res.status(500).json({ message: "Failed to verify payment", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to verify payment", error: error.message });
   }
 };
 
@@ -322,26 +347,36 @@ export const getUserOrders = async (req, res) => {
     // Apply search filter if provided
     if (search && search.trim() !== "") {
       const searchTerm = search.trim().toLowerCase();
-      allOrders = allOrders.filter(order => {
+      allOrders = allOrders.filter((order) => {
         // Check orderNumber
-        if (order.orderNumber && order.orderNumber.toLowerCase().includes(searchTerm)) {
+        if (
+          order.orderNumber &&
+          order.orderNumber.toLowerCase().includes(searchTerm)
+        ) {
           return true;
         }
-        
+
         // Check recipientName
-        if (order.shippingAddress && order.shippingAddress.recipientName && 
-            order.shippingAddress.recipientName.toLowerCase().includes(searchTerm)) {
+        if (
+          order.shippingAddress &&
+          order.shippingAddress.recipientName &&
+          order.shippingAddress.recipientName.toLowerCase().includes(searchTerm)
+        ) {
           return true;
         }
-        
+
         // Check product names
         if (order.items && order.items.length > 0) {
-          return order.items.some(item => {
+          return order.items.some((item) => {
             const product = item.productVariantId?.product;
-            return product && product.name && product.name.toLowerCase().includes(searchTerm);
+            return (
+              product &&
+              product.name &&
+              product.name.toLowerCase().includes(searchTerm)
+            );
           });
         }
-        
+
         return false;
       });
     }
@@ -385,11 +420,11 @@ export const getOrderById = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    res.json({ 
+    res.json({
       order: {
         ...order.toObject(),
-        offers: order.offers
-      }
+        offers: order.offers,
+      },
     });
   } catch (error) {
     // console.error("Error getting order:", error);
@@ -420,13 +455,13 @@ export const getOrderByIdForAdmin = async (req, res) => {
     }
     // Compose payment object for frontend compatibility
     const payment = {
-      method: order.paymentMethod || '-',
-      status: order.paymentStatus || 'pending',
-      transactionId: order.transactionId || '-',
+      method: order.paymentMethod || "-",
+      status: order.paymentStatus || "pending",
+      transactionId: order.transactionId || "-",
     };
     // Compose shipping object with only status
     const shipping = {
-      status: order.status || '-',
+      status: order.status || "-",
     };
     // Preserve original fields for backend compatibility
     const orderData = {
@@ -434,12 +469,14 @@ export const getOrderByIdForAdmin = async (req, res) => {
       payment,
       shipping,
       paymentMethod: order.paymentMethod,
-      paymentStatus: order.paymentStatus
+      paymentStatus: order.paymentStatus,
     };
     res.json({ order: orderData });
   } catch (error) {
     // console.error("Error getting order (admin):", error);
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res
+      .status(500)
+      .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
 
@@ -464,16 +501,17 @@ export const cancelOrder = async (req, res) => {
         if (
           productVariantIds.includes(item.productVariantId.toString()) &&
           !item.cancelled &&
-          item.itemStatus !== 'cancelled'
+          item.itemStatus !== "cancelled"
         ) {
           item.cancelled = true;
           item.cancellationReason = reason || "";
-          item.itemStatus = 'cancelled'; // Set per-item status only
+          item.itemStatus = "cancelled"; // Set per-item status only
           // Increment stock for the product variant
-          await mongoose.model("ProductVariant").findByIdAndUpdate(
-            item.productVariantId,
-            { $inc: { stock: item.quantity } }
-          );
+          await mongoose
+            .model("ProductVariant")
+            .findByIdAndUpdate(item.productVariantId, {
+              $inc: { stock: item.quantity },
+            });
           anyCancelled = true;
         }
       }
@@ -482,32 +520,49 @@ export const cancelOrder = async (req, res) => {
         return res.status(400).json({ message: "No valid items to cancel." });
       }
       // If all items are now cancelled, set order.status to cancelled (summary only)
-      if (order.items.every((item) => item.cancelled || item.itemStatus === 'cancelled')) {
+      if (
+        order.items.every(
+          (item) => item.cancelled || item.itemStatus === "cancelled"
+        )
+      ) {
         order.status = "cancelled";
         order.cancellationReason = reason || "";
       }
       // Refund for partial cancellation in online payment orders
-      if (order.paymentMethod === "online" && ["paid", "pending"].includes(order.paymentStatus)) {
-        const Wallet = mongoose.model('Wallet');
+      if (
+        order.paymentMethod === "online" &&
+        ["paid", "pending"].includes(order.paymentStatus)
+      ) {
+        const Wallet = mongoose.model("Wallet");
         let wallet = await Wallet.findOne({ user: order.user });
         if (!wallet) {
           wallet = await Wallet.create({ user: order.user });
         }
         // Calculate total of all items (avoid division by zero)
-        const totalOrderItems = order.items.reduce((sum, i) => sum + (i.price * i.quantity), 0) || 1;
+        const totalOrderItems =
+          order.items.reduce((sum, i) => sum + i.price * i.quantity, 0) || 1;
         // For each newly cancelled item, refund proportional amount
         for (const item of order.items) {
-          if (productVariantIds.includes(item.productVariantId.toString()) && item.cancelled && item.itemPaymentStatus !== 'refunded') {
+          if (
+            productVariantIds.includes(item.productVariantId.toString()) &&
+            item.cancelled &&
+            item.itemPaymentStatus !== "refunded"
+          ) {
             let refundAmount = item.price * item.quantity;
             // Proportional discount
             let itemDiscount = 0;
             if (order.discount && order.discount.discountAmount > 0) {
-              itemDiscount = (refundAmount / totalOrderItems) * order.discount.discountAmount;
+              itemDiscount =
+                (refundAmount / totalOrderItems) *
+                order.discount.discountAmount;
             }
             // Proportional offer
             let itemOffer = 0;
             if (order.offers && order.offers.length > 0) {
-              const totalOffer = order.offers.reduce((sum, offer) => sum + (offer.offerAmount || 0), 0);
+              const totalOffer = order.offers.reduce(
+                (sum, offer) => sum + (offer.offerAmount || 0),
+                0
+              );
               itemOffer = (refundAmount / totalOrderItems) * totalOffer;
             }
             // Proportional shipping
@@ -515,14 +570,17 @@ export const cancelOrder = async (req, res) => {
             if (order.shipping && order.items.length > 0) {
               itemShipping = order.shipping / order.items.length;
             }
-            refundAmount = Math.max(0, refundAmount - itemDiscount - itemOffer + itemShipping);
+            refundAmount = Math.max(
+              0,
+              refundAmount - itemDiscount - itemOffer + itemShipping
+            );
             wallet.balance += refundAmount;
             wallet.transactions.push({
-              type: 'credit',
+              type: "credit",
               amount: refundAmount,
-              description: `Refund for cancelled product in order ${order.orderNumber} (ONLINE) - Refunded by system`
+              description: `Refund for cancelled product in order ${order.orderNumber} (ONLINE) - Refunded by system`,
             });
-            item.itemPaymentStatus = 'refunded';
+            item.itemPaymentStatus = "refunded";
           }
         }
         await wallet.save();
@@ -530,10 +588,11 @@ export const cancelOrder = async (req, res) => {
       await order.save();
       console.log("Partial cancellation processed for order:", id);
       return res.json({
-        message:
-          order.items.every((item) => item.cancelled || item.itemStatus === 'cancelled')
-            ? "Order cancelled successfully"
-            : "Selected products cancelled successfully",
+        message: order.items.every(
+          (item) => item.cancelled || item.itemStatus === "cancelled"
+        )
+          ? "Order cancelled successfully"
+          : "Selected products cancelled successfully",
         order: {
           _id: order._id,
           orderNumber: order.orderNumber,
@@ -549,31 +608,36 @@ export const cancelOrder = async (req, res) => {
     order.cancellationReason = reason || "";
     // Increment stock for all items
     for (const item of order.items) {
-      if (!item.cancelled && item.itemStatus !== 'cancelled') {
-        await mongoose.model("ProductVariant").findByIdAndUpdate(
-          item.productVariantId,
-          { $inc: { stock: item.quantity } }
-        );
+      if (!item.cancelled && item.itemStatus !== "cancelled") {
+        await mongoose
+          .model("ProductVariant")
+          .findByIdAndUpdate(item.productVariantId, {
+            $inc: { stock: item.quantity },
+          });
         item.cancelled = true;
         item.cancellationReason = reason || "";
-        item.itemStatus = 'cancelled';
+        item.itemStatus = "cancelled";
       }
     }
     // Refund for online payment
-    if (order.paymentMethod === "online" && ["paid", "pending"].includes(order.paymentStatus) && order.paymentStatus !== "refunded") {
-      const Wallet = mongoose.model('Wallet');
+    if (
+      order.paymentMethod === "online" &&
+      ["paid", "pending"].includes(order.paymentStatus) &&
+      order.paymentStatus !== "refunded"
+    ) {
+      const Wallet = mongoose.model("Wallet");
       let wallet = await Wallet.findOne({ user: order.user });
       if (!wallet) {
         wallet = await Wallet.create({ user: order.user });
       }
       wallet.balance += order.total;
       wallet.transactions.push({
-        type: 'credit',
+        type: "credit",
         amount: order.total,
-        description: `Refund for cancelled order ${order.orderNumber} (ONLINE) - Refunded by system`
+        description: `Refund for cancelled order ${order.orderNumber} (ONLINE) - Refunded by system`,
       });
       await wallet.save();
-      order.paymentStatus = 'refunded';
+      order.paymentStatus = "refunded";
     }
     await order.save();
     res.json({
@@ -615,7 +679,7 @@ export const checkCODAvailability = async (req, res) => {
     ];
 
     const isLocationRestricted = codRestrictedStates.includes(state);
-    const isAmountRestricted = total > 50000;
+    const isAmountRestricted = total > 1000;
 
     const isAvailable = !isLocationRestricted && !isAmountRestricted;
 
@@ -651,13 +715,13 @@ export const getAllOrders = async (req, res) => {
     const date = req.query.date;
     const dateFrom = req.query.dateFrom;
     const dateTo = req.query.dateTo;
-    const sortBy = req.query.sortBy || 'createdAt';
-    const sortOrder = req.query.sortOrder || 'desc';
+    const sortBy = req.query.sortBy || "createdAt";
+    const sortOrder = req.query.sortOrder || "desc";
 
     // Build match query
     const match = {};
-    if (status === 'returned') {
-      match.status = { $in: ['returned', 'return_verified'] };
+    if (status === "returned") {
+      match.status = { $in: ["returned", "return_verified"] };
     } else if (status && status !== "all") {
       match.status = status;
     }
@@ -690,28 +754,28 @@ export const getAllOrders = async (req, res) => {
       // Lookup user
       {
         $lookup: {
-          from: 'users',
-          localField: 'user',
-          foreignField: '_id',
-          as: 'user',
+          from: "users",
+          localField: "user",
+          foreignField: "_id",
+          as: "user",
         },
       },
-      { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
       // Lookup productVariant and product for each item
       {
         $lookup: {
-          from: 'productvariants',
-          localField: 'items.productVariantId',
-          foreignField: '_id',
-          as: 'variants',
+          from: "productvariants",
+          localField: "items.productVariantId",
+          foreignField: "_id",
+          as: "variants",
         },
       },
       {
         $lookup: {
-          from: 'products',
-          localField: 'variants.product',
-          foreignField: '_id',
-          as: 'products',
+          from: "products",
+          localField: "variants.product",
+          foreignField: "_id",
+          as: "products",
         },
       },
     ];
@@ -724,11 +788,11 @@ export const getAllOrders = async (req, res) => {
         $match: {
           $or: [
             { orderNumber: { $regex: regex } },
-            { 'user.firstName': { $regex: regex } },
-            { 'user.lastName': { $regex: regex } },
-            { 'user.username': { $regex: regex } },
-            { 'user.email': { $regex: regex } },
-            { 'products.name': { $regex: regex } },
+            { "user.firstName": { $regex: regex } },
+            { "user.lastName": { $regex: regex } },
+            { "user.username": { $regex: regex } },
+            { "user.email": { $regex: regex } },
+            { "products.name": { $regex: regex } },
           ],
         },
       });
@@ -736,16 +800,13 @@ export const getAllOrders = async (req, res) => {
 
     // Sorting
     const sortObj = {};
-    sortObj[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    sortObj[sortBy] = sortOrder === "asc" ? 1 : -1;
     pipeline.push({ $sort: sortObj });
 
     // Facet for pagination and summary
     pipeline.push({
       $facet: {
-        paginated: [
-          { $skip: (page - 1) * limit },
-          { $limit: limit },
-        ],
+        paginated: [{ $skip: (page - 1) * limit }, { $limit: limit }],
         summary: [
           {
             $group: {
@@ -755,39 +816,43 @@ export const getAllOrders = async (req, res) => {
               discount: {
                 $sum: {
                   $cond: [
-                    { $in: [ { $type: "$discount" }, ["double", "int"] ] },
+                    { $in: [{ $type: "$discount" }, ["double", "int"]] },
                     "$discount",
                     {
                       $cond: [
-                        { $and: [
-                          { $eq: [ { $type: "$discount" }, "object" ] },
-                          { $ifNull: [ "$discount.discountAmount", false ] }
-                        ] },
+                        {
+                          $and: [
+                            { $eq: [{ $type: "$discount" }, "object"] },
+                            { $ifNull: ["$discount.discountAmount", false] },
+                          ],
+                        },
                         "$discount.discountAmount",
-                        0
-                      ]
-                    }
-                  ]
-                }
+                        0,
+                      ],
+                    },
+                  ],
+                },
               },
             },
           },
         ],
-        totalCount: [
-          { $count: "count" },
-        ],
+        totalCount: [{ $count: "count" }],
       },
     });
 
     // Unwind results
-    pipeline.push(
-      { $unwind: { path: "$summary", preserveNullAndEmptyArrays: true } },
-    );
+    pipeline.push({
+      $unwind: { path: "$summary", preserveNullAndEmptyArrays: true },
+    });
 
     // Run aggregation
     const result = await Order.aggregate(pipeline);
     const paginated = result[0]?.paginated || [];
-    const summary = result[0]?.summary || { salesCount: 0, orderAmount: 0, discount: 0 };
+    const summary = result[0]?.summary || {
+      salesCount: 0,
+      orderAmount: 0,
+      discount: 0,
+    };
     const total = result[0]?.totalCount?.[0]?.count || 0;
     const totalPages = Math.ceil(total / limit) || 1;
 
@@ -802,7 +867,9 @@ export const getAllOrders = async (req, res) => {
       summary,
     });
   } catch (error) {
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res
+      .status(500)
+      .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
 
@@ -828,31 +895,31 @@ export const updatePaymentStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { paymentStatus } = req.body;
-    
+
     const order = await Order.findById(id);
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
-    
+
     // Validate payment status
     const validPaymentStatuses = ["pending", "paid", "failed", "refunded"];
     if (!validPaymentStatuses.includes(paymentStatus)) {
       return res.status(400).json({ message: "Invalid payment status" });
     }
-    
+
     // Only allow payment status updates for COD orders
     if (order.paymentMethod !== "cod") {
-      return res.status(400).json({ 
-        message: "Payment status can only be updated for COD orders" 
+      return res.status(400).json({
+        message: "Payment status can only be updated for COD orders",
       });
     }
-    
+
     order.paymentStatus = paymentStatus;
     await order.save();
-    
-    res.json({ 
-      message: "Payment status updated successfully", 
-      order 
+
+    res.json({
+      message: "Payment status updated successfully",
+      order,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -869,21 +936,28 @@ export const updateOnlinePaymentStatus = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
     if (order.paymentMethod !== "online") {
-      return res.status(400).json({ message: "Only online payment orders can be updated here" });
+      return res
+        .status(400)
+        .json({ message: "Only online payment orders can be updated here" });
     }
     if (order.paymentStatus !== "failed") {
-      return res.status(400).json({ message: "Only failed payment orders can be retried" });
+      return res
+        .status(400)
+        .json({ message: "Only failed payment orders can be retried" });
     }
     if (paymentStatus !== "paid") {
-      return res.status(400).json({ message: "Can only update paymentStatus to 'paid'" });
+      return res
+        .status(400)
+        .json({ message: "Can only update paymentStatus to 'paid'" });
     }
     // Decrement stock if not already decremented
     for (const item of order.items) {
       if (item.itemPaymentStatus !== "paid") {
-        await mongoose.model("ProductVariant").findByIdAndUpdate(
-          item.productVariantId,
-          { $inc: { stock: -item.quantity } }
-        );
+        await mongoose
+          .model("ProductVariant")
+          .findByIdAndUpdate(item.productVariantId, {
+            $inc: { stock: -item.quantity },
+          });
         item.itemPaymentStatus = "paid";
       }
     }
@@ -915,32 +989,45 @@ export const returnOrder = async (req, res) => {
     const { id } = req.params;
     const { items } = req.body; // [{ productVariantId, reason }]
     if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ message: 'No items specified for return.' });
+      return res
+        .status(400)
+        .json({ message: "No items specified for return." });
     }
     const order = await Order.findById(id);
     if (!order) {
-      return res.status(404).json({ message: 'Order not found.' });
+      return res.status(404).json({ message: "Order not found." });
     }
     // Allow per-item return if itemStatus === 'delivered'
     let anyReturned = false;
     for (const reqItem of items) {
-      const item = order.items.find(i => i.productVariantId.toString() === reqItem.productVariantId);
-      if (item && !item.returned && item.itemStatus === 'delivered') {
+      const item = order.items.find(
+        (i) => i.productVariantId.toString() === reqItem.productVariantId
+      );
+      if (item && !item.returned && item.itemStatus === "delivered") {
         item.returned = true;
-        item.returnReason = reqItem.reason || '';
-        item.itemStatus = 'returned'; // Set per-item status only
+        item.returnReason = reqItem.reason || "";
+        item.itemStatus = "returned"; // Set per-item status only
         anyReturned = true;
       }
     }
     if (!anyReturned) {
-      return res.status(400).json({ message: 'No valid items to return. Only delivered, non-returned items can be returned.' });
+      return res
+        .status(400)
+        .json({
+          message:
+            "No valid items to return. Only delivered, non-returned items can be returned.",
+        });
     }
     // If all items are returned, set order.status = 'returned' (summary only)
-    if (order.items.every(item => item.itemStatus === 'returned' || item.returned)) {
-      order.status = 'returned';
+    if (
+      order.items.every(
+        (item) => item.itemStatus === "returned" || item.returned
+      )
+    ) {
+      order.status = "returned";
     }
     await order.save();
-    res.json({ message: 'Order return requested successfully.', order });
+    res.json({ message: "Order return requested successfully.", order });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -952,24 +1039,29 @@ export const verifyReturnRequest = async (req, res) => {
     const { id } = req.params;
     const order = await Order.findById(id);
     if (!order) {
-      return res.status(404).json({ message: 'Order not found.' });
+      return res.status(404).json({ message: "Order not found." });
     }
-    if (order.status !== 'returned') {
-      return res.status(400).json({ message: 'Only orders with status "returned" can be verified.' });
+    if (order.status !== "returned") {
+      return res
+        .status(400)
+        .json({
+          message: 'Only orders with status "returned" can be verified.',
+        });
     }
     // Check if order is eligible for refund
-    const isEligibleForRefund = (
-      (order.paymentMethod === 'online' && (order.paymentStatus === 'paid' || order.paymentStatus === 'pending')) ||
-      (order.paymentMethod === 'cod')
-    );
+    const isEligibleForRefund =
+      (order.paymentMethod === "online" &&
+        (order.paymentStatus === "paid" ||
+          order.paymentStatus === "pending")) ||
+      order.paymentMethod === "cod";
     let refundAmount = 0;
     // Calculate refund as sum of returned items only
     refundAmount = order.items
-      .filter(item => item.returned)
-      .reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      .filter((item) => item.returned)
+      .reduce((sum, item) => sum + item.price * item.quantity, 0);
     if (isEligibleForRefund && refundAmount > 0) {
       // Import Wallet model
-      const Wallet = mongoose.model('Wallet');
+      const Wallet = mongoose.model("Wallet");
       // Find or create user's wallet
       let wallet = await Wallet.findOne({ user: order.user });
       if (!wallet) {
@@ -978,23 +1070,25 @@ export const verifyReturnRequest = async (req, res) => {
       // Add refund amount to wallet
       wallet.balance += refundAmount;
       wallet.transactions.push({
-        type: 'credit',
+        type: "credit",
         amount: refundAmount,
-        description: `Refund for order ${order.orderNumber} (${order.paymentMethod.toUpperCase()}) - Return verified by admin (partial refund)`
+        description: `Refund for order ${
+          order.orderNumber
+        } (${order.paymentMethod.toUpperCase()}) - Return verified by admin (partial refund)`,
       });
       await wallet.save();
       // Update order payment status to refunded
-      order.paymentStatus = 'refunded';
+      order.paymentStatus = "refunded";
     }
-    order.status = 'return_verified';
+    order.status = "return_verified";
     order.returnVerifiedBy = req.user.userId;
     order.returnVerifiedAt = new Date();
     await order.save();
-    res.json({ 
-      message: 'Return request verified successfully.', 
+    res.json({
+      message: "Return request verified successfully.",
       order,
-      refundProcessed: order.paymentStatus === 'refunded',
-      refundAmount
+      refundProcessed: order.paymentStatus === "refunded",
+      refundAmount,
     });
   } catch (error) {
     // console.error('Error in verifyReturnRequest:', error);
@@ -1007,26 +1101,30 @@ export const rejectReturnRequest = async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
-    
+
     const order = await Order.findById(id);
     if (!order) {
-      return res.status(404).json({ message: 'Order not found.' });
+      return res.status(404).json({ message: "Order not found." });
     }
-    
-    if (order.status !== 'returned') {
-      return res.status(400).json({ message: 'Only orders with status "returned" can be rejected.' });
+
+    if (order.status !== "returned") {
+      return res
+        .status(400)
+        .json({
+          message: 'Only orders with status "returned" can be rejected.',
+        });
     }
-    
-    order.status = 'rejected';
+
+    order.status = "rejected";
     order.returnVerifiedBy = req.user.userId;
     order.returnVerifiedAt = new Date();
-    order.cancellationReason = reason || 'Return request rejected by admin';
-    
+    order.cancellationReason = reason || "Return request rejected by admin";
+
     await order.save();
-    
-    res.json({ 
-      message: 'Return request rejected successfully.', 
-      order
+
+    res.json({
+      message: "Return request rejected successfully.",
+      order,
     });
   } catch (error) {
     // console.error('Error in rejectReturnRequest:', error);
@@ -1040,22 +1138,26 @@ export const verifyReturnWithoutRefund = async (req, res) => {
     const { id } = req.params;
     const order = await Order.findById(id);
     if (!order) {
-      return res.status(404).json({ message: 'Order not found.' });
+      return res.status(404).json({ message: "Order not found." });
     }
-    
-    if (order.status !== 'returned') {
-      return res.status(400).json({ message: 'Only orders with status "returned" can be verified.' });
+
+    if (order.status !== "returned") {
+      return res
+        .status(400)
+        .json({
+          message: 'Only orders with status "returned" can be verified.',
+        });
     }
-    
-    order.status = 'return_verified';
+
+    order.status = "return_verified";
     order.returnVerifiedBy = req.user.userId;
     order.returnVerifiedAt = new Date();
     await order.save();
-    
-    res.json({ 
-      message: 'Return request verified successfully without refund.', 
+
+    res.json({
+      message: "Return request verified successfully without refund.",
       order,
-      refundProcessed: false
+      refundProcessed: false,
     });
   } catch (error) {
     // console.error('Error in verifyReturnWithoutRefund:', error);
@@ -1070,60 +1172,73 @@ export const updateOrderItemStatus = async (req, res) => {
     const { status, paymentStatus } = req.body;
     const order = await Order.findById(orderId);
     if (!order) {
-      return res.status(404).json({ message: 'Order not found.' });
+      return res.status(404).json({ message: "Order not found." });
     }
     const item = order.items.id(itemId);
     if (!item) {
-      return res.status(404).json({ message: 'Order item not found.' });
+      return res.status(404).json({ message: "Order item not found." });
     }
     // Only update fields that are present in the request
-    if (typeof status !== 'undefined') {
+    if (typeof status !== "undefined") {
       item.itemStatus = status;
     }
-    if (typeof paymentStatus !== 'undefined') {
+    if (typeof paymentStatus !== "undefined") {
       // Wallet refund for per-item refund (COD or online)
       if (
-        paymentStatus === 'refunded' &&
-        item.itemPaymentStatus !== 'refunded' &&
-        (order.paymentMethod === 'cod' || order.paymentMethod === 'online')
+        paymentStatus === "refunded" &&
+        item.itemPaymentStatus !== "refunded" &&
+        (order.paymentMethod === "cod" || order.paymentMethod === "online")
       ) {
-        const Wallet = mongoose.model('Wallet');
+        const Wallet = mongoose.model("Wallet");
         let wallet = await Wallet.findOne({ user: order.user });
         if (!wallet) {
           wallet = await Wallet.create({ user: order.user });
         }
         let refundAmount = item.price * item.quantity;
-        const totalOrderItems = order.items.reduce((sum, i) => sum + (i.price * i.quantity), 0) || 1;
+        const totalOrderItems =
+          order.items.reduce((sum, i) => sum + i.price * i.quantity, 0) || 1;
         let itemDiscount = 0;
         if (order.discount && order.discount.discountAmount > 0) {
-          itemDiscount = (refundAmount / totalOrderItems) * order.discount.discountAmount;
+          itemDiscount =
+            (refundAmount / totalOrderItems) * order.discount.discountAmount;
         }
         let itemOffer = 0;
         if (order.offers && order.offers.length > 0) {
-          const totalOffer = order.offers.reduce((sum, offer) => sum + (offer.offerAmount || 0), 0);
+          const totalOffer = order.offers.reduce(
+            (sum, offer) => sum + (offer.offerAmount || 0),
+            0
+          );
           itemOffer = (refundAmount / totalOrderItems) * totalOffer;
         }
         let itemShipping = 0;
         if (order.shipping && order.items.length > 0) {
           itemShipping = order.shipping / order.items.length;
         }
-        refundAmount = Math.max(0, refundAmount - itemDiscount - itemOffer + itemShipping);
+        refundAmount = Math.max(
+          0,
+          refundAmount - itemDiscount - itemOffer + itemShipping
+        );
         wallet.balance += refundAmount;
         wallet.transactions.push({
-          type: 'credit',
+          type: "credit",
           amount: refundAmount,
-          description: `Refund for item in order ${order.orderNumber} (${order.paymentMethod.toUpperCase()}) - Refunded by admin`
+          description: `Refund for item in order ${
+            order.orderNumber
+          } (${order.paymentMethod.toUpperCase()}) - Refunded by admin`,
         });
         await wallet.save();
       }
       item.itemPaymentStatus = paymentStatus;
     }
     // If all items are delivered, set order.status = 'delivered' (summary only)
-    if (order.items.length > 0 && order.items.every(i => i.itemStatus === 'delivered')) {
-      order.status = 'delivered';
+    if (
+      order.items.length > 0 &&
+      order.items.every((i) => i.itemStatus === "delivered")
+    ) {
+      order.status = "delivered";
     }
     await order.save();
-    res.json({ message: 'Order item status/payment status updated', order });
+    res.json({ message: "Order item status/payment status updated", order });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
