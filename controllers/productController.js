@@ -159,7 +159,7 @@ export const addProduct = async (req, res) => {
           // Resize image with error handling
           let buffer;
           try {
-            buffer = await sharp(file.path)
+            buffer = await sharp(file.buffer)
             .resize(600, 600, { fit: 'cover' })
             .toBuffer();
           } catch (sharpError) {
@@ -168,7 +168,7 @@ export const addProduct = async (req, res) => {
           }
           
           // Save temp file for Cloudinary upload
-          const tempPath = file.path + '-resized.jpg';
+          const tempPath = `uploads/${file.fieldname}-${Date.now()}-${Math.round(Math.random() * 1e9)}-resized.jpg`;
           fs.writeFileSync(tempPath, buffer);
           tempFiles.push(tempPath);
           
@@ -192,16 +192,6 @@ export const addProduct = async (req, res) => {
         return res.status(500).json({ message: processingError.message });
       } finally {
         // Clean up temporary files
-        for (const file of productImages) {
-          try {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          } catch (err) {
-            console.log('Error deleting original file:', err.message);
-          }
-        }
-        
         for (const tempFile of tempFiles) {
           try {
             if (fs.existsSync(tempFile)) {
@@ -247,7 +237,7 @@ export const addProduct = async (req, res) => {
             // Resize image with error handling
             let buffer;
             try {
-              buffer = await sharp(file.path)
+              buffer = await sharp(file.buffer)
               .resize(600, 600, { fit: 'cover' })
               .toBuffer();
             } catch (sharpError) {
@@ -255,7 +245,7 @@ export const addProduct = async (req, res) => {
               throw new Error(`Failed to process image ${file.originalname}: ${sharpError.message}`);
             }
             
-            const tempPath = file.path + '-resized.jpg';
+            const tempPath = `uploads/${file.fieldname}-${Date.now()}-${Math.round(Math.random() * 1e9)}-resized.jpg`;
             fs.writeFileSync(tempPath, buffer);
             tempFiles.push(tempPath);
             
@@ -275,23 +265,17 @@ export const addProduct = async (req, res) => {
           return res.status(500).json({ message: processingError.message });
         } finally {
           // Clean up temporary files for this variant
-          for (const file of variantImages) {
-            try {
-              if (fs.existsSync(file.path)) {
-                fs.unlinkSync(file.path);
-              }
-            } catch (err) {
-              console.log('Error deleting original file:', err.message);
-            }
-          }
-          
           for (const tempFile of tempFiles) {
             try {
+              console.log(`[CLEANUP] Attempting to delete temp file: ${tempFile}`);
               if (fs.existsSync(tempFile)) {
                 fs.unlinkSync(tempFile);
+                console.log(`[CLEANUP] Deleted temp file: ${tempFile}`);
+              } else {
+                console.log(`[CLEANUP] Temp file not found (already deleted?): ${tempFile}`);
               }
             } catch (err) {
-              console.log('Error deleting temp file:', err.message);
+              console.log(`[CLEANUP] Error deleting temp file: ${tempFile} - ${err.message}`);
             }
           }
         }
@@ -759,10 +743,10 @@ export const editProduct = async (req, res) => {
       try {
         for (let i = 0; i < req.files.length; i++) {
           const file = req.files[i];
-          const buffer = await sharp(file.path)
+          const buffer = await sharp(file.buffer)
             .resize(600, 600, { fit: 'cover' })
             .toBuffer();
-          const tempPath = file.path + '-resized.jpg';
+          const tempPath = `uploads/${file.fieldname}-${Date.now()}-${Math.round(Math.random() * 1e9)}-resized.jpg`;
           fs.writeFileSync(tempPath, buffer);
           tempFiles.push(tempPath);
           
@@ -775,16 +759,6 @@ export const editProduct = async (req, res) => {
         
       } finally {
         // Clean up temporary files
-        for (const file of req.files) {
-          try {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          } catch (err) {
-            console.log('Error deleting original file:', err.message);
-          }
-        }
-        
         for (const tempFile of tempFiles) {
           try {
             if (fs.existsSync(tempFile)) {
@@ -832,7 +806,7 @@ export const editProduct = async (req, res) => {
             // Resize image with error handling
             let buffer;
             try {
-              buffer = await sharp(file.path)
+              buffer = await sharp(file.buffer)
               .resize(600, 600, { fit: 'cover' })
               .toBuffer();
             } catch (sharpError) {
@@ -840,7 +814,7 @@ export const editProduct = async (req, res) => {
               throw new Error(`Failed to process image ${file.originalname}: ${sharpError.message}`);
             }
             
-            const tempPath = file.path + '-resized.jpg';
+            const tempPath = `uploads/${file.fieldname}-${Date.now()}-${Math.round(Math.random() * 1e9)}-resized.jpg`;
             fs.writeFileSync(tempPath, buffer);
             tempFiles.push(tempPath);
             
@@ -860,16 +834,6 @@ export const editProduct = async (req, res) => {
           return res.status(500).json({ message: processingError.message });
         } finally {
           // Clean up temporary files for this variant
-          for (const file of variantImages) {
-            try {
-              if (fs.existsSync(file.path)) {
-                fs.unlinkSync(file.path);
-              }
-            } catch (err) {
-              console.log('Error deleting original file:', err.message);
-            }
-          }
-          
           for (const tempFile of tempFiles) {
             try {
               if (fs.existsSync(tempFile)) {
@@ -1060,14 +1024,14 @@ export const updateVariant = async (req, res) => {
           // Resize image
           let buffer;
           try {
-            buffer = await sharp(file.path)
+            buffer = await sharp(file.buffer)
               .resize(600, 600, { fit: 'cover' })
               .toBuffer();
           } catch (sharpError) {
             console.error('Sharp error:', sharpError);
             throw new Error(`Failed to process image ${file.originalname}: ${sharpError.message}`);
           }
-          const tempPath = file.path + '-resized.jpg';
+          const tempPath = `uploads/${file.fieldname}-${Date.now()}-${Math.round(Math.random() * 1e9)}-resized.jpg`;
           fs.writeFileSync(tempPath, buffer);
           tempFiles.push(tempPath);
           // Upload to Cloudinary
@@ -1085,15 +1049,6 @@ export const updateVariant = async (req, res) => {
         return res.status(500).json({ message: processingError.message });
       } finally {
         // Clean up temporary files
-        for (const file of variantImages) {
-          try {
-            if (fs.existsSync(file.path)) {
-              fs.unlinkSync(file.path);
-            }
-          } catch (err) {
-            console.log('Error deleting original file:', err.message);
-          }
-        }
         for (const tempFile of tempFiles) {
           try {
             if (fs.existsSync(tempFile)) {
@@ -1177,7 +1132,7 @@ export const addVariant = async (req, res) => {
         // Resize image with error handling
         let buffer;
         try {
-          buffer = await sharp(file.path)
+          buffer = await sharp(file.buffer)
           .resize(600, 600, { fit: 'cover' })
           .toBuffer();
         } catch (sharpError) {
@@ -1185,7 +1140,7 @@ export const addVariant = async (req, res) => {
           throw new Error(`Failed to process image ${file.originalname}: ${sharpError.message}`);
         }
         
-        const tempPath = file.path + '-resized.jpg';
+        const tempPath = `uploads/${file.fieldname}-${Date.now()}-${Math.round(Math.random() * 1e9)}-resized.jpg`;
         fs.writeFileSync(tempPath, buffer);
         tempFiles.push(tempPath);
         
@@ -1205,23 +1160,17 @@ export const addVariant = async (req, res) => {
       return res.status(500).json({ message: processingError.message });
     } finally {
       // Clean up temporary files
-      for (const file of variantImages) {
-        try {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        } catch (err) {
-          console.log('Error deleting original file:', err.message);
-        }
-      }
-      
       for (const tempFile of tempFiles) {
         try {
+          console.log(`[CLEANUP] Attempting to delete temp file: ${tempFile}`);
           if (fs.existsSync(tempFile)) {
             fs.unlinkSync(tempFile);
+            console.log(`[CLEANUP] Deleted temp file: ${tempFile}`);
+          } else {
+            console.log(`[CLEANUP] Temp file not found (already deleted?): ${tempFile}`);
           }
         } catch (err) {
-          console.log('Error deleting temp file:', err.message);
+          console.log(`[CLEANUP] Error deleting temp file: ${tempFile} - ${err.message}`);
         }
       }
     }

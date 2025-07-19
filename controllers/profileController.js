@@ -173,6 +173,15 @@ export const uploadProfileImage = async function (req, res) {
       { $set: { profileImage: result.secure_url } },
       { new: true }
     );
+    // Delete local file after upload
+    const fs = await import('fs');
+    try {
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+    } catch (err) {
+      console.log('Error deleting profile image file:', err.message);
+    }
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
