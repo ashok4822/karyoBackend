@@ -44,7 +44,7 @@ import {
 import { verifyAdmin } from "../middleware/authMiddleware.js";
 import fs from "fs";
 import path from "path";
-import { getDashboard } from "../controllers/adminDashboard.js";
+import { getDashboard, generateLedgerBook } from "../controllers/adminDashboard.js";
 import {
   getAllOrders,
   getOrderByIdForAdmin,
@@ -169,6 +169,7 @@ const handleMulterError = (error, req, res, next) => {
 router.post("/login", adminLogin);
 router.get("/getUsers", verifyAdmin, getUsers);
 router.get("/dashboard", verifyAdmin, getDashboard);
+router.get("/ledger", verifyAdmin, generateLedgerBook);
 router.get("/users", verifyAdmin, getUsersPaginated);
 router.patch("/users/:id/block", verifyToken, isAdmin, blockUnblockUser);
 router.post("/logout", adminLogout);
