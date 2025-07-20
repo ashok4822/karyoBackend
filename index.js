@@ -27,20 +27,9 @@ app.use(
     origin: function (origin, callback) {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
-      
-      const allowedOrigins = [
-        'http://localhost:8080',
-        'http://localhost:8081', 
-        'http://localhost:8082',
-        'http://localhost:8083',
-        'http://localhost:8084',
-        'http://127.0.0.1:8080',
-        'http://127.0.0.1:8081',
-        'http://127.0.0.1:8082',
-        'http://127.0.0.1:8083',
-        'http://127.0.0.1:8084'
-      ];
-      
+
+      const allowedOrigins = process.env.ALLOWED_ORIGINS;
+
       if (allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
       }
@@ -92,10 +81,6 @@ app.use("/api", referralRoutes);
 
 //Public routes
 app.use("/", publicRoutes);
-
-
-
-
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
