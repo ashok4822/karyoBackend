@@ -76,6 +76,23 @@ export const createOffer = async (req, res) => {
       }
     }
 
+    // Restrict to only one active referral offer at a time
+    if (offerType === "referral") {
+      const existingActiveReferralOffer = await Offer.findOne({
+        offerType: "referral",
+        status: "active",
+        isDeleted: false,
+        validFrom: { $lte: new Date(validTo) }, // Overlapping period
+        validTo: { $gte: new Date(validFrom) },
+      });
+      if (existingActiveReferralOffer) {
+        return res.status(statusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "An active referral offer already exists. Please deactivate or delete it before creating a new one.",
+        });
+      }
+    }
+
     // --- Offer Discount Validation ---
     if (minimumAmount !== undefined && minimumAmount !== null && parseFloat(minimumAmount) > 0 && parseFloat(discountValue) >= parseFloat(minimumAmount)) {
       return res.status(statusCodes.BAD_REQUEST).json({
