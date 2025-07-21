@@ -244,7 +244,12 @@ export const createOrder = async (req, res) => {
         paymentMethod: order.paymentMethod,
         subtotal: order.subtotal,
         subtotalAfterDiscount: order.subtotalAfterDiscount,
-        discount: order.discount,
+        discount: order.discount
+          ? {
+              ...order.discount,
+              discountName: order.discount.code || order.discount.description || order.discount.name || ""
+            }
+          : null,
         offers: order.offers,
         shipping: order.shipping,
         total: order.total,
