@@ -126,10 +126,10 @@ export const createOrder = async (req, res) => {
     // COD-specific validations
     if (paymentMethod === "cod") {
       // Check if COD is available for the order amount
-      if (total > 50000) {
+      const maxCodAmount = parseFloat(process.env.MAX_COD_AMOUNT) || 1000;
+      if (total > maxCodAmount) {
         return res.status(400).json({
-          message:
-            "Cash on Delivery is not available for orders above ₹50,000. Please use online payment.",
+          message: `Cash on Delivery is not available for orders above ₹${maxCodAmount.toLocaleString()}. Please use online payment.`,
         });
       }
       // Check if COD is available for the shipping address location
@@ -166,12 +166,10 @@ export const createOrder = async (req, res) => {
         razorpayOrderId,
       });
       if (existingOrder) {
-        return res
-          .status(200)
-          .json({
-            message: "Order already exists for this payment attempt",
-            order: existingOrder,
-          });
+        return res.status(200).json({
+          message: "Order already exists for this payment attempt",
+          order: existingOrder,
+        });
       }
       if (incomingPaymentStatus === "failed") {
         finalPaymentStatus = "failed";
@@ -247,7 +245,11 @@ export const createOrder = async (req, res) => {
         discount: order.discount
           ? {
               ...order.discount,
-              discountName: order.discount.code || order.discount.description || order.discount.name || ""
+              discountName:
+                order.discount.code ||
+                order.discount.description ||
+                order.discount.name ||
+                "",
             }
           : null,
         offers: order.offers,
@@ -292,12 +294,10 @@ export const createRazorpayOrder = async (req, res) => {
     const order = await razorpay.orders.create(options);
     res.status(201).json({ order });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        message: "Failed to create Razorpay order",
-        error: error.message,
-      });
+    res.status(500).json({
+      message: "Failed to create Razorpay order",
+      error: error.message,
+    });
   }
 };
 
@@ -684,7 +684,8 @@ export const checkCODAvailability = async (req, res) => {
     ];
 
     const isLocationRestricted = codRestrictedStates.includes(state);
-    const isAmountRestricted = total > 1000;
+    const maxCodAmount = parseFloat(process.env.MAX_COD_AMOUNT) || 50000;
+    const isAmountRestricted = total > maxCodAmount;
 
     const isAvailable = !isLocationRestricted && !isAmountRestricted;
 
@@ -695,7 +696,7 @@ export const checkCODAvailability = async (req, res) => {
           ? "COD not available in your location"
           : null,
         amount: isAmountRestricted
-          ? "COD not available for orders above ₹50,000"
+          ? `COD not available for orders above ₹${maxCodAmount.toLocaleString()}`
           : null,
       },
       message: isAvailable
@@ -1016,12 +1017,10 @@ export const returnOrder = async (req, res) => {
       }
     }
     if (!anyReturned) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "No valid items to return. Only delivered, non-returned items can be returned.",
-        });
+      return res.status(400).json({
+        message:
+          "No valid items to return. Only delivered, non-returned items can be returned.",
+      });
     }
     // If all items are returned, set order.status = 'returned' (summary only)
     if (
@@ -1047,11 +1046,9 @@ export const verifyReturnRequest = async (req, res) => {
       return res.status(404).json({ message: "Order not found." });
     }
     if (order.status !== "returned") {
-      return res
-        .status(400)
-        .json({
-          message: 'Only orders with status "returned" can be verified.',
-        });
+      return res.status(400).json({
+        message: 'Only orders with status "returned" can be verified.',
+      });
     }
     // Check if order is eligible for refund
     const isEligibleForRefund =
@@ -1113,11 +1110,9 @@ export const rejectReturnRequest = async (req, res) => {
     }
 
     if (order.status !== "returned") {
-      return res
-        .status(400)
-        .json({
-          message: 'Only orders with status "returned" can be rejected.',
-        });
+      return res.status(400).json({
+        message: 'Only orders with status "returned" can be rejected.',
+      });
     }
 
     order.status = "rejected";
@@ -1147,11 +1142,9 @@ export const verifyReturnWithoutRefund = async (req, res) => {
     }
 
     if (order.status !== "returned") {
-      return res
-        .status(400)
-        .json({
-          message: 'Only orders with status "returned" can be verified.',
-        });
+      return res.status(400).json({
+        message: 'Only orders with status "returned" can be verified.',
+      });
     }
 
     order.status = "return_verified";

@@ -1,1 +1,1 @@
-export const OTP_EXPIRY_SECONDS = 60; // 1 minute
+export const OTP_EXPIRY_SECONDS = parseInt(process.env.OTP_EXPIRY_SECONDS) || 60

@@ -56,7 +56,7 @@ router.get(
 router.get(
   "/google/callback",
   passport.authenticate("google", {
-    failureRedirect: "http://localhost:8080/login",
+    failureRedirect: process.env.LOGIN_FAILURE_REDIRECT_URL || "http://localhost:8080/login",
     session: false,
   }),
   (req, res) => {
@@ -69,15 +69,14 @@ router.get(
       secure: isProduction,
       sameSite: isProduction ? "Strict" : "Lax",
       path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: ((parseInt(process.env.COOKIE_MAX_AGE_DAYS) || 7) * 24 * 60 * 60 * 1000), // 7 days
     });
     // Save refresh token to user document
     User.updateOne({ _id: req.user._id }, { $set: { refreshToken } }).then(
       () => {
         // Redirect to frontend with access token in URL
-        res.redirect(
-          `http://localhost:8080/google-auth-success?token=${accessToken}`
-        );
+        const successRedirectUrl = process.env.GOOGLE_AUTH_SUCCESS_REDIRECT_URL || "http://localhost:8080/google-auth-success";
+        res.redirect(`${successRedirectUrl}?token=${accessToken}`);
       }
     );
   }

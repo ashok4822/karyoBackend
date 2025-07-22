@@ -442,6 +442,8 @@ export const generateReferralReward = async (referrerId) => {
       throw new Error("Failed to generate unique coupon code");
     }
 
+    const days = parseInt(process.env.REFERRAL_COUPON_VALID_DAYS) || 30;
+
     // Create reward coupon
     const rewardCoupon = new Coupon({
       code: couponCode,
@@ -451,7 +453,7 @@ export const generateReferralReward = async (referrerId) => {
       minimumAmount: referralOffer.minimumAmount,
       maximumDiscount: referralOffer.maximumDiscount,
       validFrom: new Date(),
-      validTo: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      validTo: new Date(Date.now() + days * 24 * 60 * 60 * 1000),
       maxUsage: 1,
       maxUsagePerUser: 1,
     });

@@ -19,7 +19,7 @@ import referralRoutes from "./routes/referralRoutes.js";
 dotenv.config();
 
 const app = express();
-const PORT = 5000;
+const PORT = parseInt(process.env.PORT, 10) || 5000;
 
 // app.use(cors());
 app.use(

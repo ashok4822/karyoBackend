@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 
 // Limit login attempts: max 5 per 15 minutes
 export const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: (parseInt(process.env.RATE_LIMIT_WINDOW_MINUTES) || 15) * 60 * 1000, // 15 minutes
   max: 5, // limit each IP to 5 requests per windowMs
   message: {
     message: "Too many login attempts. Please try again after 15 minutes.",
@@ -14,7 +14,7 @@ export const loginLimiter = rateLimit({
 
 // Limit refresh token calls: max 500 per hour per user (increased for development)
 export const refreshLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
+  windowMs: (parseInt(process.env.RATE_LIMIT_WINDOW_HOURS) || 1) * 60 * 60 * 1000, // 1 hour
   max: 500, // 500 per hour (increased from 120)
   keyGenerator: (req) => {
     try {

@@ -12,7 +12,7 @@ import { generateUniqueReferralCode } from "../utils/referralCodeGenerator.js";
 dotenv.config();
 
 const PASSWORD_RESET_TOKEN_SECRET = process.env.PASSWORD_RESET_TOKEN_SECRET || "reset_secret";
-const PASSWORD_RESET_TOKEN_EXPIRY = "3m"; // 3 minutes
+const PASSWORD_RESET_TOKEN_EXPIRY = process.env.PASSWORD_RESET_TOKEN_EXPIRY || "3m";
 
 function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -60,13 +60,17 @@ export const registerUser = async function (req, res) {
           // If not found, try to find a user with this code
           referrerUser = await User.findOne({ referralCode: referralCode });
           if (!referrerUser) {
-            return res.status(400).json({ message: "Invalid or expired referral code/token" });
+            return res
+              .status(400)
+              .json({ message: "Invalid or expired referral code/token" });
           }
           usedReferralCode = referralCode;
         }
       }
       if (!referral && !referrerUser) {
-        return res.status(400).json({ message: "Invalid or expired referral code/token" });
+        return res
+          .status(400)
+          .json({ message: "Invalid or expired referral code/token" });
       }
     }
 
@@ -81,7 +85,11 @@ export const registerUser = async function (req, res) {
       password: hashedPassword,
       mobileNo: undefined,
       referralCode: newReferralCode,
-      referredBy: referrerUser ? referrerUser._id : (referral ? referral.referrer : undefined),
+      referredBy: referrerUser
+        ? referrerUser._id
+        : referral
+        ? referral.referrer
+        : undefined,
     });
 
     const savedUserData = await user.save();
@@ -108,7 +116,9 @@ export const registerUser = async function (req, res) {
             await referralDoc.completeReferral();
           }
           // Update referrer's referral count
-          const referrerId = referrerUser ? referrerUser._id : referralDoc.referrer;
+          const referrerId = referrerUser
+            ? referrerUser._id
+            : referralDoc.referrer;
           await User.findByIdAndUpdate(referrerId, {
             $inc: { referralCount: 1 },
           });
@@ -117,14 +127,18 @@ export const registerUser = async function (req, res) {
             referredBy: referrerId,
           });
           // Generate reward coupon for referrer
-          const { generateReferralReward } = await import('../controllers/referralController.js');
+          const { generateReferralReward } = await import(
+            "../controllers/referralController.js"
+          );
           const rewardCoupon = await generateReferralReward(referrerId);
 
           // Update referral with reward coupon
           referralDoc.rewardCoupon = rewardCoupon._id;
           await referralDoc.save();
 
-          console.log(`Referral completed successfully. Coupon generated: ${rewardCoupon.code}`);
+          console.log(
+            `Referral completed successfully. Coupon generated: ${rewardCoupon.code}`
+          );
         } catch (referralError) {
           console.error("Error processing referral:", referralError);
           // Don't fail registration if referral processing fails
@@ -201,12 +215,10 @@ export const loginUser = async function (req, res) {
       path: "/",
     });
 
-    res
-      .status(200)
-      .json({
-        user: { id: user.id, role: user.role, username: user.username },
-        token: accessToken,
-      });
+    res.status(200).json({
+      user: { id: user.id, role: user.role, username: user.username },
+      token: accessToken,
+    });
   } catch (error) {
     res
       .status(500)
@@ -238,7 +250,8 @@ export const requestOtp = async (req, res) => {
 };
 
 export const verifyOtp = async (req, res) => {
-  const { email, otp, username, password, referralCode, referralToken } = req.body;
+  const { email, otp, username, password, referralCode, referralToken } =
+    req.body;
   if (!email || !otp || !username || !password)
     return res.status(400).json({ message: "All fields required" });
   const otpDoc = await Otp.findOne({ email, otp });
@@ -267,13 +280,17 @@ export const verifyOtp = async (req, res) => {
       if (!referral) {
         referrerUser = await User.findOne({ referralCode: referralCode });
         if (!referrerUser) {
-          return res.status(400).json({ message: "Invalid or expired referral code/token" });
+          return res
+            .status(400)
+            .json({ message: "Invalid or expired referral code/token" });
         }
         usedReferralCode = referralCode;
       }
     }
     if (!referral && !referrerUser) {
-      return res.status(400).json({ message: "Invalid or expired referral code/token" });
+      return res
+        .status(400)
+        .json({ message: "Invalid or expired referral code/token" });
     }
   }
 
@@ -286,7 +303,11 @@ export const verifyOtp = async (req, res) => {
     password: hashedPassword,
     mobileNo: undefined,
     referralCode: newReferralCode,
-    referredBy: referrerUser ? referrerUser._id : (referral ? referral.referrer : undefined),
+    referredBy: referrerUser
+      ? referrerUser._id
+      : referral
+      ? referral.referrer
+      : undefined,
   });
   await user.save();
   await Otp.deleteMany({ email });
@@ -319,12 +340,16 @@ export const verifyOtp = async (req, res) => {
         referredBy: referrerId,
       });
       // Generate reward coupon for referrer
-      const { generateReferralReward } = await import('../controllers/referralController.js');
+      const { generateReferralReward } = await import(
+        "../controllers/referralController.js"
+      );
       const rewardCoupon = await generateReferralReward(referrerId);
       // Update referral with reward coupon
       referralDoc.rewardCoupon = rewardCoupon._id;
       await referralDoc.save();
-      console.log(`Referral completed successfully. Coupon generated: ${rewardCoupon.code}`);
+      console.log(
+        `Referral completed successfully. Coupon generated: ${rewardCoupon.code}`
+      );
     } catch (referralError) {
       console.error("Error processing referral (OTP signup):", referralError);
       // Don't fail registration if referral processing fails
@@ -360,9 +385,9 @@ export const requestPasswordResetOtp = async (req, res) => {
     subject: "Your Password Reset OTP Code",
     text: `Your OTP code is: ${otp}`,
   });
-  res.json({ 
+  res.json({
     message: "OTP sent to email",
-    expiresAt: new Date(otpDoc.createdAt).getTime() + OTP_EXPIRY_SECONDS * 1000 // ms timestamp
+    expiresAt: new Date(otpDoc.createdAt).getTime() + OTP_EXPIRY_SECONDS * 1000, // ms timestamp
   });
 };
 
@@ -383,7 +408,9 @@ export const verifyPasswordResetOtp = async (req, res) => {
       .json({ message: "OTP expired. Please request a new one." });
   }
   // Generate a password reset token (JWT)
-  const resetToken = jwt.sign({ email }, PASSWORD_RESET_TOKEN_SECRET, { expiresIn: PASSWORD_RESET_TOKEN_EXPIRY });
+  const resetToken = jwt.sign({ email }, PASSWORD_RESET_TOKEN_SECRET, {
+    expiresIn: PASSWORD_RESET_TOKEN_EXPIRY,
+  });
   await Otp.deleteMany({ email }); // Invalidate OTP after successful verification
   res.status(200).json({ message: "OTP verified", resetToken });
 };
@@ -399,7 +426,9 @@ export const resetPassword = async (req, res) => {
       return res.status(400).json({ message: "Invalid reset token" });
     }
   } catch (err) {
-    return res.status(400).json({ message: "Reset token expired or invalid. Please request a new OTP." });
+    return res.status(400).json({
+      message: "Reset token expired or invalid. Please request a new OTP.",
+    });
   }
   const user = await User.findOne({ email });
   if (!user) return res.status(400).json({ message: "User not found" });
@@ -412,32 +441,40 @@ export const refreshToken = async (req, res) => {
   try {
     const token = req.cookies["refreshToken"];
     console.log("[refreshToken] Starting refresh process");
-    
+
     if (!token) {
       console.log("[refreshToken] No refresh token cookie found");
       return res.status(401).json({ message: "No refresh token" });
     }
-    
+
     let payload;
     try {
       payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET);
-      console.log("[refreshToken] JWT verification successful for user:", payload.userId);
+      console.log(
+        "[refreshToken] JWT verification successful for user:",
+        payload.userId
+      );
     } catch (err) {
       console.log("[refreshToken] JWT verification failed:", err.message);
       return res.status(401).json({ message: "Invalid refresh token" });
     }
-    
+
     const user = await User.findById(payload.userId);
     if (!user) {
       console.log("[refreshToken] No user found for userId:", payload.userId);
       return res.status(401).json({ message: "Invalid refresh token" });
     }
-    
+
     if (user.refreshToken !== token) {
-      console.log("[refreshToken] Token mismatch. User's stored token:", user.refreshToken ? "exists" : "missing", "Cookie token:", token ? "exists" : "missing");
+      console.log(
+        "[refreshToken] Token mismatch. User's stored token:",
+        user.refreshToken ? "exists" : "missing",
+        "Cookie token:",
+        token ? "exists" : "missing"
+      );
       return res.status(401).json({ message: "Invalid refresh token" });
     }
-    
+
     const newAccessToken = generateAccessToken(user);
     console.log("[refreshToken] Success for user:", user.email);
     res.json({ token: newAccessToken });
