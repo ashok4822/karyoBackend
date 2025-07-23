@@ -616,6 +616,7 @@ export const getAllDiscountUsageStats = async (req, res) => {
       {
         $project: {
           discountName: "$discountInfo.name",
+          maxUsagePerUser: "$discountInfo.maxUsagePerUser", // <-- add this line
           totalUsers: 1,
           totalUsage: 1,
           avgUsagePerUser: { $round: ["$avgUsagePerUser", 2] },

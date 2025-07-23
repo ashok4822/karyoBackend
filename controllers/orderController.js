@@ -604,6 +604,7 @@ export const cancelOrder = async (req, res) => {
           status: order.status, // summary only
           items: order.items,
           total: order.total,
+          createdAt: order.createdAt, // <-- added
         },
       });
     }
@@ -653,6 +654,7 @@ export const cancelOrder = async (req, res) => {
         status: order.status, // summary only
         items: order.items,
         total: order.total,
+        createdAt: order.createdAt, // <-- added
       },
     });
   } catch (error) {
