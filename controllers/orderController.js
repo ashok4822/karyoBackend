@@ -408,6 +408,7 @@ export const getUserOrders = async (req, res) => {
 
 // Get order by ID
 export const getOrderById = async (req, res) => {
+  console.log("======TESTING======");
   try {
     const { id } = req.params;
     const order = await Order.findOne({
@@ -425,6 +426,8 @@ export const getOrderById = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
+    console.log("order : ", order);
+
     res.json({
       order: {
         ...order.toObject(),
@@ -441,6 +444,7 @@ export const getOrderById = async (req, res) => {
 
 // Get order by ID (admin)
 export const getOrderByIdForAdmin = async (req, res) => {
+  console.log("=====AdminOrder=======");
   try {
     const { id } = req.params;
     const order = await Order.findOne({ _id: id })
@@ -455,6 +459,11 @@ export const getOrderByIdForAdmin = async (req, res) => {
           select: "name brand mainImage",
         },
       });
+
+    console.log("adminOrder: ", order);
+
+    let shippingCharge = order.shipping;
+
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
@@ -472,7 +481,9 @@ export const getOrderByIdForAdmin = async (req, res) => {
     const orderData = {
       ...order.toObject(),
       payment,
+      shippingCharge,
       shipping,
+
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus,
     };
