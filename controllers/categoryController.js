@@ -10,13 +10,21 @@ export const listCategories = async (req, res) => {
     const sort = req.query.sort === "asc" ? 1 : -1;
     const query = {
       name: { $regex: search, $options: "i" },
+      isDeleted: false // <-- Default: exclude deleted
     };
 
     // Filter by status
-    if (status === "active") query.status = "active";
-    else if (status === "inactive") query.status = "inactive";
-    else if (status === "deleted") query.status = "deleted";
-    // else show all statuses (including deleted)
+    if (status === "active") {
+      query.status = "active";
+      query.isDeleted = false;
+    } else if (status === "inactive") {
+      query.status = "inactive";
+      query.isDeleted = false;
+    } else if (status === "deleted") {
+      query.status = "deleted";
+      query.isDeleted = true; // <-- Only show deleted categories
+    }
+    // else show all statuses (excluding deleted)
 
     const total = await Category.countDocuments(query);
     const categories = await Category.find(query)
@@ -96,7 +104,7 @@ export const editCategory = async (req, res) => {
   }
 };
 
-// Soft delete category (set status to deleted)
+// Soft delete category (set status to deleted and isDeleted to true)
 export const deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
@@ -105,6 +113,7 @@ export const deleteCategory = async (req, res) => {
       return res.status(404).json({ message: "Category not found" });
 
     category.status = "deleted";
+    category.isDeleted = true; // <-- Set isDeleted to true
     await category.save();
     res.json({ message: "Category deleted" });
   } catch (error) {
@@ -114,7 +123,7 @@ export const deleteCategory = async (req, res) => {
   }
 };
 
-// Restore deleted category (set status back to active)
+// Restore deleted category (set status back to active and isDeleted to false)
 export const restoreCategory = async (req, res) => {
   try {
     const { id } = req.params;
@@ -127,6 +136,7 @@ export const restoreCategory = async (req, res) => {
     }
 
     category.status = "active";
+    category.isDeleted = false; // <-- Set isDeleted to false
     await category.save();
     res.json({ message: "Category restored", category });
   } catch (error) {
@@ -139,7 +149,7 @@ export const restoreCategory = async (req, res) => {
 // Get all active categories for user-facing components
 export const getActiveCategories = async (req, res) => {
   try {
-    const categories = await Category.find({ status: "active" })
+    const categories = await Category.find({ status: "active", isDeleted: false })
       .sort({ name: 1 })
       .select("name _id");
 
