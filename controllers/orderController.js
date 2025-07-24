@@ -180,8 +180,17 @@ export const createOrder = async (req, res) => {
       finalPaymentStatus = "pending";
     }
 
-    // Set per-item payment status for online payments
-    const itemsWithPaymentStatus = items.map((item) => ({
+    // Set per-item payment status and attach offers to each item
+    const itemsWithOfferAndPaymentStatus = items.map((item) => {
+      // Find offers for this productVariant
+      const itemOffers = Array.isArray(offers)
+        ? offers.filter(
+            (offer) =>
+              offer.productVariantId === item.productVariantId ||
+              offer.productVariantId === String(item.productVariantId)
+          )
+        : [];
+      return {
       ...item,
       itemPaymentStatus:
         finalPaymentStatus === "paid"
@@ -189,17 +198,19 @@ export const createOrder = async (req, res) => {
           : finalPaymentStatus === "failed"
           ? "failed"
           : "pending",
-    }));
+        offers: itemOffers, // Attach offers to the item
+      };
+    });
     const order = new Order({
       user: req.user.userId,
-      items: itemsWithPaymentStatus,
+      items: itemsWithOfferAndPaymentStatus,
       shippingAddress,
       paymentMethod,
       razorpayOrderId: paymentMethod === "online" ? razorpayOrderId : undefined,
       subtotal,
       subtotalAfterDiscount,
       discount,
-      offers, // <-- this is now included
+      // offers, // <-- REMOVED this line
       shipping,
       total,
       paymentStatus: finalPaymentStatus,
