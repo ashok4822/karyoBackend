@@ -79,7 +79,7 @@ export const getDashboard = async (req, res) => {
           path: "user",
           select: "username firstName lastName email",
         })
-        .select("orderNumber total status createdAt user"),
+        .select("orderNumber total status createdAt user items discount shipping offers"),
       // Low stock products (stock < 10)
       Product.aggregate([
         { $lookup: {
@@ -238,6 +238,52 @@ export const getDashboard = async (req, res) => {
       ? ((periodOrders - prevPeriodOrders) / (prevPeriodOrders || 1)) * 100
       : 0;
 
+    // Add computedTotal to each recent order
+    function computeAdjustedTotal(order) {
+      const allItemsTotal = order.items?.reduce(
+        (sum, item) =>
+          sum +
+          (item.price * item.quantity -
+            (item.offers
+              ? item.offers.reduce((s, offer) => s + (offer.offerAmount || 0), 0)
+              : 0)),
+        0
+      ) || 0;
+      const nonRefundedItemsTotal = order.items?.filter((item) => item.itemPaymentStatus !== "refunded")
+        .reduce(
+          (sum, item) =>
+            sum +
+            (item.price * item.quantity -
+              (item.offers
+                ? item.offers.reduce((s, offer) => s + (offer.offerAmount || 0), 0)
+                : 0)),
+          0
+        ) || 0;
+      const discount =
+        order.discount && typeof order.discount === "object"
+          ? Number(order.discount.discountAmount) || 0
+          : typeof order.discount === "number"
+          ? order.discount
+          : 0;
+      const proportionalDiscount =
+        allItemsTotal > 0 ? (nonRefundedItemsTotal / allItemsTotal) * discount : 0;
+      const shipping =
+        typeof order.shipping === "number"
+          ? order.shipping
+          : typeof order.shippingCharge === "number"
+          ? order.shippingCharge
+          : 0;
+      const adjustedTotal = Math.max(
+        0,
+        nonRefundedItemsTotal - proportionalDiscount + shipping
+      );
+      return adjustedTotal;
+    }
+    const recentOrdersWithComputedTotal = recentOrders.map(order => ({
+      ...order.toObject(),
+      computedTotal: computeAdjustedTotal(order.toObject ? order.toObject() : order),
+    }));
+
     res.json({
       success: true,
       data: {
@@ -247,7 +293,7 @@ export const getDashboard = async (req, res) => {
         totalCustomers,
         salesGrowth: Math.round(salesGrowth),
         orderGrowth: Math.round(orderGrowth),
-        recentOrders,
+        recentOrders: recentOrdersWithComputedTotal,
         lowStockProducts,
         chartData,
         bestSellingProducts,

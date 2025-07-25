@@ -218,6 +218,16 @@ export const createOrder = async (req, res) => {
     await order.save();
     console.log("Saved order offers:", order.offers);
 
+    // Increment usageCount for each offer used in the order (if payment is confirmed)
+    if (finalPaymentStatus === "paid" && Array.isArray(offers) && offers.length > 0) {
+      // offers may be array of offer objects or IDs
+      const offerIds = offers.map(offer => offer._id ? offer._id : offer);
+      await mongoose.model("Offer").updateMany(
+        { _id: { $in: offerIds } },
+        { $inc: { usageCount: 1 } }
+      );
+    }
+
     // Decrement stock for each ordered product variant ONLY if paymentStatus is 'paid'
     if (finalPaymentStatus === "paid") {
       for (const item of items) {
@@ -735,6 +745,49 @@ export const checkCODAvailability = async (req, res) => {
   }
 };
 
+// Helper to compute adjusted total for each order
+function computeAdjustedTotal(order) {
+  const allItemsTotal = order.items.reduce(
+    (sum, item) =>
+      sum +
+      (item.price * item.quantity -
+        (item.offers
+          ? item.offers.reduce((s, offer) => s + (offer.offerAmount || 0), 0)
+          : 0)),
+    0
+  );
+  const nonRefundedItemsTotal = order.items
+    .filter((item) => item.itemPaymentStatus !== "refunded")
+    .reduce(
+      (sum, item) =>
+        sum +
+        (item.price * item.quantity -
+          (item.offers
+            ? item.offers.reduce((s, offer) => s + (offer.offerAmount || 0), 0)
+            : 0)),
+      0
+    );
+  const discount =
+    order.discount && typeof order.discount === "object"
+      ? Number(order.discount.discountAmount) || 0
+      : typeof order.discount === "number"
+      ? order.discount
+      : 0;
+  const proportionalDiscount =
+    allItemsTotal > 0 ? (nonRefundedItemsTotal / allItemsTotal) * discount : 0;
+  const shipping =
+    typeof order.shipping === "number"
+      ? order.shipping
+      : typeof order.shippingCharge === "number"
+      ? order.shippingCharge
+      : 0;
+  const adjustedTotal = Math.max(
+    0,
+    nonRefundedItemsTotal - proportionalDiscount + shipping
+  );
+  return adjustedTotal;
+}
+
 // Get all orders (admin)
 export const getAllOrders = async (req, res) => {
   try {
@@ -742,155 +795,126 @@ export const getAllOrders = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const status = req.query.status;
     const search = req.query.search;
-    const date = req.query.date;
-    const dateFrom = req.query.dateFrom;
-    const dateTo = req.query.dateTo;
     const sortBy = req.query.sortBy || "createdAt";
-    const sortOrder = req.query.sortOrder || "desc";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
-    // Build match query
-    const match = {};
+    // Build query object
+    const query = {};
     if (status === "returned") {
-      match.status = { $in: ["returned", "return_verified"] };
+      query.status = { $in: ["returned", "return_verified"] };
     } else if (status && status !== "all") {
-      match.status = status;
-    }
-    // Date filter
-    if (date) {
-      const start = new Date(date);
-      const end = new Date(date);
-      end.setHours(23, 59, 59, 999);
-      start.setHours(0, 0, 0, 0);
-      match.createdAt = { $gte: start, $lte: end };
-    } else if (dateFrom && dateTo) {
-      const start = new Date(dateFrom);
-      const end = new Date(dateTo);
-      start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
-      match.createdAt = { $gte: start, $lte: end };
-    } else if (dateFrom) {
-      const start = new Date(dateFrom);
-      start.setHours(0, 0, 0, 0);
-      match.createdAt = { $gte: start };
-    } else if (dateTo) {
-      const end = new Date(dateTo);
-      end.setHours(23, 59, 59, 999);
-      match.createdAt = { $lte: end };
+      query.status = status;
     }
 
-    // Aggregation pipeline
-    const pipeline = [
-      { $match: match },
-      // Lookup user
-      {
-        $lookup: {
-          from: "users",
-          localField: "user",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
-      // Lookup productVariant and product for each item
-      {
-        $lookup: {
-          from: "productvariants",
-          localField: "items.productVariantId",
-          foreignField: "_id",
-          as: "variants",
-        },
-      },
-      {
-        $lookup: {
-          from: "products",
-          localField: "variants.product",
-          foreignField: "_id",
-          as: "products",
-        },
-      },
-    ];
+    // Remove $or search filter from MongoDB query
+    // (search will be handled in-memory after population)
 
-    // Search filter
+    // Find orders with population
+    let orders = await Order.find(query)
+      .populate({
+        path: "user",
+        select: "username firstName lastName email address mobileNo",
+      })
+      .populate({
+        path: "items.productVariantId",
+        populate: {
+          path: "product",
+          select: "name brand mainImage",
+        },
+      })
+      .sort({ [sortBy]: sortOrder });
+
+    // In-memory search filter for all fields
     if (search && search.trim() !== "") {
-      const term = search.trim();
-      const regex = new RegExp(term, "i");
-      pipeline.push({
-        $match: {
-          $or: [
-            { orderNumber: { $regex: regex } },
-            { "user.firstName": { $regex: regex } },
-            { "user.lastName": { $regex: regex } },
-            { "user.username": { $regex: regex } },
-            { "user.email": { $regex: regex } },
-            { "products.name": { $regex: regex } },
-          ],
-        },
+      const regex = new RegExp(search.trim(), "i");
+      orders = orders.filter(order => {
+        // Order number
+        if (order.orderNumber && regex.test(order.orderNumber)) return true;
+        // User fields
+        if (order.user) {
+          if (regex.test(order.user.firstName || "")) return true;
+          if (regex.test(order.user.lastName || "")) return true;
+          if (regex.test(order.user.username || "")) return true;
+          if (regex.test(order.user.email || "")) return true;
+        }
+        // Product name in any item
+        if (order.items && order.items.some(item =>
+          item.productVariantId?.product?.name &&
+          regex.test(item.productVariantId.product.name)
+        )) return true;
+        return false;
       });
     }
 
-    // Sorting
-    const sortObj = {};
-    sortObj[sortBy] = sortOrder === "asc" ? 1 : -1;
-    pipeline.push({ $sort: sortObj });
+    // Paginate after filtering
+    const total = orders.length;
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedOrders = orders.slice(startIndex, endIndex);
 
-    // Facet for pagination and summary
-    pipeline.push({
-      $facet: {
-        paginated: [{ $skip: (page - 1) * limit }, { $limit: limit }],
-        summary: [
-          {
-            $group: {
-              _id: null,
-              salesCount: { $sum: 1 },
-              orderAmount: { $sum: "$total" },
-              discount: {
-                $sum: {
-                  $cond: [
-                    { $in: [{ $type: "$discount" }, ["double", "int"]] },
-                    "$discount",
-                    {
-                      $cond: [
-                        {
-                          $and: [
-                            { $eq: [{ $type: "$discount" }, "object"] },
-                            { $ifNull: ["$discount.discountAmount", false] },
-                          ],
-                        },
-                        "$discount.discountAmount",
-                        0,
-                      ],
-                    },
-                  ],
-                },
-              },
-            },
-          },
-        ],
-        totalCount: [{ $count: "count" }],
-      },
+    // Add computedTotal, computedProportionalDiscount, and couponCode to each order
+    const paginatedOrdersWithTotal = paginatedOrders.map(order => {
+      const o = order.toObject ? order.toObject() : order;
+      // Compute proportional discount
+      const allItemsTotal = o.items.reduce(
+        (sum, item) =>
+          sum +
+          (item.price * item.quantity -
+            (item.offers
+              ? item.offers.reduce((s, offer) => s + (offer.offerAmount || 0), 0)
+              : 0)),
+        0
+      );
+      const nonRefundedItemsTotal = o.items
+        .filter((item) => item.itemPaymentStatus !== "refunded")
+        .reduce(
+          (sum, item) =>
+            sum +
+            (item.price * item.quantity -
+              (item.offers
+                ? item.offers.reduce((s, offer) => s + (offer.offerAmount || 0), 0)
+                : 0)),
+          0
+        );
+      const discount =
+        o.discount && typeof o.discount === "object"
+          ? Number(o.discount.discountAmount) || 0
+          : typeof o.discount === "number"
+          ? o.discount
+          : 0;
+      const proportionalDiscount =
+        allItemsTotal > 0 ? (nonRefundedItemsTotal / allItemsTotal) * discount : 0;
+      // Extract coupon code
+      let couponCode = undefined;
+      if (o.discount && typeof o.discount === "object") {
+        couponCode = o.discount.code || o.discount.discountName || o.discount.name || undefined;
+      }
+      return {
+        ...o,
+        computedTotal: computeAdjustedTotal(o),
+        computedProportionalDiscount: proportionalDiscount,
+        couponCode,
+      };
     });
 
-    // Unwind results
-    pipeline.push({
-      $unwind: { path: "$summary", preserveNullAndEmptyArrays: true },
-    });
-
-    // Run aggregation
-    const result = await Order.aggregate(pipeline);
-    const paginated = result[0]?.paginated || [];
-    const summary = result[0]?.summary || {
-      salesCount: 0,
-      orderAmount: 0,
-      discount: 0,
+    // Calculate summary for all filtered (not paginated) orders
+    const summary = {
+      salesCount: total,
+      orderAmount: orders.reduce((sum, order) => sum + (order.total || 0), 0),
+      discount: orders.reduce((sum, order) => {
+        if (order.discount && typeof order.discount === "object") {
+          return sum + (Number(order.discount.discountAmount) || 0);
+        } else if (typeof order.discount === "number") {
+          return sum + order.discount;
+        }
+        return sum;
+      }, 0),
     };
-    const total = result[0]?.totalCount?.[0]?.count || 0;
+
     const totalPages = Math.ceil(total / limit) || 1;
 
-    // Hydrate user and items for frontend compatibility
-    // (If needed, you can re-populate here, or adjust frontend to use the new structure)
-
     res.json({
-      orders: paginated,
+      orders: paginatedOrdersWithTotal,
       total,
       page,
       totalPages,
