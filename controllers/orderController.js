@@ -45,6 +45,22 @@ export const createOrder = async (req, res) => {
         .json({ message: "Valid payment method is required" });
     }
 
+    // Stock validation for each product variant before proceeding
+    for (const item of items) {
+      const productVariant = await mongoose.model("ProductVariant").findById(item.productVariantId);
+      if (!productVariant) {
+        return res.status(400).json({
+          message: `Product variant not found for item: ${item.productVariantId}`,
+        });
+      }
+      if (productVariant.stock < item.quantity) {
+        return res.status(400).json({
+          message: `Insufficient stock for ${productVariant.colour} ${productVariant.capacity}. Only ${productVariant.stock} left.`,
+          productVariantId: item.productVariantId,
+        });
+      }
+    }
+
     // Validate discount if provided
     if (discount && discount.discountId) {
       // First check in Discount model
@@ -1287,5 +1303,33 @@ export const updateOrderItemStatus = async (req, res) => {
     res.json({ message: "Order item status/payment status updated", order });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// Check stock for all items in an order before payment
+export const checkOrderStock = async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "No items provided" });
+    }
+    for (const item of items) {
+      const productVariant = await mongoose.model("ProductVariant").findById(item.productVariantId);
+      if (!productVariant) {
+        return res.status(400).json({
+          message: `Product variant not found for item: ${item.productVariantId}`,
+        });
+      }
+      if (productVariant.stock < item.quantity) {
+        return res.status(400).json({
+          message: `Insufficient stock for ${productVariant.colour || ''} ${productVariant.capacity || ''}. Only ${productVariant.stock} left.`,
+          productVariantId: item.productVariantId,
+        });
+      }
+    }
+    return res.status(200).json({ success: true, message: "All items in stock" });
+  } catch (error) {
+    console.error("Error checking order stock:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
