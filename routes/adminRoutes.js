@@ -1,5 +1,5 @@
 import express from "express";
-import { isAdmin, verifyToken } from "../middleware/authMiddleware.js";
+import { isAdmin, verifyToken, verifyAdmin } from "../middleware/authMiddleware.js";
 import { getUsers } from "../controllers/userController.js";
 import {
   adminLogin,
@@ -28,7 +28,7 @@ import {
   getUserDiscountUsage,
   getAllDiscountUsageStats,
 } from "../controllers/discountController.js";
-import multer from "multer";
+import { getDashboard, generateLedgerBook } from "../controllers/adminDashboard.js";
 import {
   addProduct,
   listProducts,
@@ -41,10 +41,8 @@ import {
   getBrandOptions,
   addVariant,
 } from "../controllers/productController.js";
-import { verifyAdmin } from "../middleware/authMiddleware.js";
 import fs from "fs";
 import path from "path";
-import { getDashboard, generateLedgerBook } from "../controllers/adminDashboard.js";
 import {
   getAllOrders,
   getOrderByIdForAdmin,
@@ -76,84 +74,9 @@ import {
   getOffersByProducts,
 } from "../controllers/offerController.js";
 import { getAllReferrals as listReferrals } from "../controllers/referralController.js";
+import { uploadProduct, handleMulterError } from "../middleware/upload.js";
 
 const router = express.Router();
-
-// Ensure uploads directory exists
-const uploadsDir = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Configure multer with error handling for multiple field types
-
-const storage = multer.memoryStorage();
-
-const fileFilter = (req, file, cb) => {
-  // Accept only image files
-  if (file.mimetype.startsWith("image/")) {
-    cb(null, true);
-  } else {
-    cb(new Error("Only image files are allowed!"), false);
-  }
-};
-
-const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-    files: 50, // Increased limit for multiple variants
-  },
-});
-
-// Custom multer configuration for products with variants
-const uploadProduct = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-    files: 50, // Increased limit for multiple variants
-  },
-}).fields([
-  { name: "images", maxCount: 10 }, // Product-level images
-  { name: "variantImages_0", maxCount: 10 }, // Variant 0 images
-  { name: "variantImages_1", maxCount: 10 }, // Variant 1 images
-  { name: "variantImages_2", maxCount: 10 }, // Variant 2 images
-  { name: "variantImages_3", maxCount: 10 }, // Variant 3 images
-  { name: "variantImages_4", maxCount: 10 }, // Variant 4 images
-  { name: "variantImages_5", maxCount: 10 }, // Variant 5 images
-  { name: "variantImages_6", maxCount: 10 }, // Variant 6 images
-  { name: "variantImages_7", maxCount: 10 }, // Variant 7 images
-  { name: "variantImages_8", maxCount: 10 }, // Variant 8 images
-  { name: "variantImages_9", maxCount: 10 }, // Variant 9 images
-]);
-
-// Error handling middleware for multer
-const handleMulterError = (error, req, res, next) => {
-  if (error instanceof multer.MulterError) {
-    if (error.code === "LIMIT_FILE_SIZE") {
-      return res
-        .status(400)
-        .json({ message: "File too large. Maximum size is 5MB." });
-    }
-    if (error.code === "LIMIT_FILE_COUNT") {
-      return res
-        .status(400)
-        .json({ message: "Too many files. Maximum is 50 files." });
-    }
-    if (error.code === "LIMIT_UNEXPECTED_FILE") {
-      return res.status(400).json({ message: "Unexpected file field." });
-    }
-    return res.status(400).json({ message: `Upload error: ${error.message}` });
-  }
-
-  if (error) {
-    return res.status(400).json({ message: error.message });
-  }
-
-  next();
-};
 
 router.post("/login", adminLogin);
 router.get("/getUsers", verifyAdmin, getUsers);
