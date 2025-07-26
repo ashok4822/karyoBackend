@@ -839,6 +839,9 @@ export const getAllOrders = async (req, res) => {
     const search = req.query.search;
     const sortBy = req.query.sortBy || "createdAt";
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+    const paymentStatus = req.query.paymentStatus;
+    const dateFrom = req.query.dateFrom;
+    const dateTo = req.query.dateTo;
 
     // Build query object
     const query = {};
@@ -846,6 +849,16 @@ export const getAllOrders = async (req, res) => {
       query.status = { $in: ["returned", "return_verified"] };
     } else if (status && status !== "all") {
       query.status = status;
+    }
+    if (paymentStatus && paymentStatus !== "all") {
+      query.paymentStatus = paymentStatus;
+    }
+    if (dateFrom && dateTo) {
+      query.createdAt = { $gte: new Date(dateFrom), $lte: new Date(dateTo) };
+    } else if (dateFrom) {
+      query.createdAt = { $gte: new Date(dateFrom) };
+    } else if (dateTo) {
+      query.createdAt = { $lte: new Date(dateTo) };
     }
 
     // Remove $or search filter from MongoDB query

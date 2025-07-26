@@ -26,7 +26,7 @@ router.post("/verify-otp", verifyOtp);
 router.post("/request-password-reset-otp", requestPasswordResetOtp);
 router.post("/verify-password-reset-otp", verifyPasswordResetOtp);
 router.post("/reset-password", resetPassword);
-router.post("/refresh-token", refreshLimiter, refreshToken);
+router.post("/refresh-token", refreshToken);
 router.post("/logout", logout);
 router.post("/admin/logout", adminLogout);
 
