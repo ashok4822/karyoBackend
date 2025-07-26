@@ -39,7 +39,7 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: "Shipping address is required" });
     }
 
-    if (!paymentMethod || !["cod", "online"].includes(paymentMethod)) {
+    if (!paymentMethod || !["cod", "online", "wallet"].includes(paymentMethod)) {
       return res
         .status(400)
         .json({ message: "Valid payment method is required" });
@@ -192,6 +192,27 @@ export const createOrder = async (req, res) => {
       } else {
         finalPaymentStatus = "paid";
       }
+    } else if (paymentMethod === "wallet") {
+      // Wallet payment logic
+      // Import Wallet model here to avoid circular dependency
+      const Wallet = (await import("../models/walletModel.js")).default;
+      let wallet = await Wallet.findOne({ user: req.user.userId });
+      if (!wallet) {
+        wallet = await Wallet.create({ user: req.user.userId });
+      }
+      if (wallet.balance < total) {
+        console.error("[WALLET] Insufficient balance for user", req.user.userId);
+        return res.status(400).json({ message: "Insufficient wallet balance" });
+      }
+      wallet.balance -= total;
+      wallet.transactions.push({
+        type: "debit",
+        amount: total,
+        description: `Order payment for new order`,
+      });
+      await wallet.save();
+      console.log(`[WALLET] Deducted INR ${total} from user ${req.user.userId}`);
+      finalPaymentStatus = "paid";
     } else {
       finalPaymentStatus = "pending";
     }
@@ -247,11 +268,16 @@ export const createOrder = async (req, res) => {
     // Decrement stock for each ordered product variant ONLY if paymentStatus is 'paid'
     if (finalPaymentStatus === "paid") {
       for (const item of items) {
-        await mongoose
-          .model("ProductVariant")
-          .findByIdAndUpdate(item.productVariantId, {
-            $inc: { stock: -item.quantity },
-          });
+        try {
+          await mongoose
+            .model("ProductVariant")
+            .findByIdAndUpdate(item.productVariantId, {
+              $inc: { stock: -item.quantity },
+            });
+          console.log(`[STOCK] Decremented stock for variant ${item.productVariantId} by ${item.quantity}`);
+        } catch (err) {
+          console.error(`[STOCK] Failed to decrement stock for variant ${item.productVariantId}:`, err);
+        }
       }
     }
 
@@ -581,9 +607,9 @@ export const cancelOrder = async (req, res) => {
         order.status = "cancelled";
         order.cancellationReason = reason || "";
       }
-      // Refund for partial cancellation in online payment orders
+      // Refund for partial cancellation in online/wallet payment orders
       if (
-        order.paymentMethod === "online" &&
+        (order.paymentMethod === "online" || order.paymentMethod === "wallet") &&
         ["paid", "pending"].includes(order.paymentStatus)
       ) {
         const Wallet = mongoose.model("Wallet");
@@ -631,7 +657,7 @@ export const cancelOrder = async (req, res) => {
             wallet.transactions.push({
               type: "credit",
               amount: refundAmount,
-              description: `Refund for cancelled product in order ${order.orderNumber} (ONLINE) - Refunded by system`,
+              description: `Refund for cancelled product in order ${order.orderNumber} (${order.paymentMethod.toUpperCase()}) - Refunded by system`,
             });
             item.itemPaymentStatus = "refunded";
           }
@@ -673,9 +699,9 @@ export const cancelOrder = async (req, res) => {
         item.itemStatus = "cancelled";
       }
     }
-    // Refund for online payment
+    // Refund for online/wallet payment
     if (
-      order.paymentMethod === "online" &&
+      (order.paymentMethod === "online" || order.paymentMethod === "wallet") &&
       ["paid", "pending"].includes(order.paymentStatus) &&
       order.paymentStatus !== "refunded"
     ) {
@@ -688,7 +714,7 @@ export const cancelOrder = async (req, res) => {
       wallet.transactions.push({
         type: "credit",
         amount: order.total,
-        description: `Refund for cancelled order ${order.orderNumber} (ONLINE) - Refunded by system`,
+        description: `Refund for cancelled order ${order.orderNumber} (${order.paymentMethod.toUpperCase()}) - Refunded by system`,
       });
       await wallet.save();
       order.paymentStatus = "refunded";
@@ -842,10 +868,13 @@ export const getAllOrders = async (req, res) => {
 
     // In-memory search filter for all fields
     if (search && search.trim() !== "") {
-      const regex = new RegExp(search.trim(), "i");
+      const searchTerm = search.trim();
+      const regex = new RegExp(searchTerm, "i");
+      
       orders = orders.filter(order => {
         // Order number
         if (order.orderNumber && regex.test(order.orderNumber)) return true;
+        
         // User fields
         if (order.user) {
           if (regex.test(order.user.firstName || "")) return true;
@@ -853,11 +882,15 @@ export const getAllOrders = async (req, res) => {
           if (regex.test(order.user.username || "")) return true;
           if (regex.test(order.user.email || "")) return true;
         }
+        
         // Product name in any item
-        if (order.items && order.items.some(item =>
-          item.productVariantId?.product?.name &&
-          regex.test(item.productVariantId.product.name)
-        )) return true;
+        if (order.items && order.items.length > 0) {
+          return order.items.some(item => {
+            const productName = item.productVariantId?.product?.name;
+            return productName && regex.test(productName);
+          });
+        }
+        
         return false;
       });
     }
@@ -1116,7 +1149,7 @@ export const verifyReturnRequest = async (req, res) => {
     }
     // Check if order is eligible for refund
     const isEligibleForRefund =
-      (order.paymentMethod === "online" &&
+      ((order.paymentMethod === "online" || order.paymentMethod === "wallet") &&
         (order.paymentStatus === "paid" ||
           order.paymentStatus === "pending")) ||
       order.paymentMethod === "cod";
@@ -1245,11 +1278,11 @@ export const updateOrderItemStatus = async (req, res) => {
       item.itemStatus = status;
     }
     if (typeof paymentStatus !== "undefined") {
-      // Wallet refund for per-item refund (COD or online)
+      // Wallet refund for per-item refund (COD, online, or wallet)
       if (
         paymentStatus === "refunded" &&
         item.itemPaymentStatus !== "refunded" &&
-        (order.paymentMethod === "cod" || order.paymentMethod === "online")
+        (order.paymentMethod === "cod" || order.paymentMethod === "online" || order.paymentMethod === "wallet")
       ) {
         const Wallet = mongoose.model("Wallet");
         let wallet = await Wallet.findOne({ user: order.user });
