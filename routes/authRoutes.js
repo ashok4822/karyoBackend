@@ -31,7 +31,7 @@ router.post("/logout", logout);
 router.post("/admin/logout", adminLogout);
 
 // Development route to clear rate limits (remove in production)
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.NODE_ENV !== "production") {
   router.post("/clear-rate-limits", (req, res) => {
     // This would need to be implemented with the actual rate limiter store
     // For now, just return success
@@ -44,7 +44,10 @@ router.get(
   (req, res, next) => {
     // Capture referral token/code from ?ref=... and store globally for the OAuth callback
     if (req.query.ref) {
-      global._passport_oauth_referral = { referralToken: req.query.ref, referralCode: req.query.ref };
+      global._passport_oauth_referral = {
+        referralToken: req.query.ref,
+        referralCode: req.query.ref,
+      };
     } else {
       global._passport_oauth_referral = null;
     }
@@ -56,7 +59,8 @@ router.get(
 router.get(
   "/google/callback",
   passport.authenticate("google", {
-    failureRedirect: process.env.LOGIN_FAILURE_REDIRECT_URL || "http://localhost:8080/login",
+    failureRedirect:
+      process.env.LOGIN_FAILURE_REDIRECT_URL || "http://localhost:8080/login",
     session: false,
   }),
   (req, res) => {
@@ -69,13 +73,16 @@ router.get(
       secure: isProduction,
       sameSite: isProduction ? "Strict" : "Lax",
       path: "/",
-      maxAge: ((parseInt(process.env.COOKIE_MAX_AGE_DAYS) || 7) * 24 * 60 * 60 * 1000), // 7 days
+      maxAge:
+        (parseInt(process.env.COOKIE_MAX_AGE_DAYS) || 7) * 24 * 60 * 60 * 1000, // 7 days
     });
     // Save refresh token to user document
     User.updateOne({ _id: req.user._id }, { $set: { refreshToken } }).then(
       () => {
         // Redirect to frontend with access token in URL
-        const successRedirectUrl = process.env.GOOGLE_AUTH_SUCCESS_REDIRECT_URL || "http://localhost:8080/google-auth-success";
+        const successRedirectUrl =
+          process.env.GOOGLE_AUTH_SUCCESS_REDIRECT_URL ||
+          "http://localhost:8080/google-auth-success";
         res.redirect(`${successRedirectUrl}?token=${accessToken}`);
       }
     );
