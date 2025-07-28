@@ -11,8 +11,10 @@ import jwt from "jsonwebtoken";
 import { generateUniqueReferralCode } from "../utils/referralCodeGenerator.js";
 dotenv.config();
 
-const PASSWORD_RESET_TOKEN_SECRET = process.env.PASSWORD_RESET_TOKEN_SECRET || "reset_secret";
-const PASSWORD_RESET_TOKEN_EXPIRY = process.env.PASSWORD_RESET_TOKEN_EXPIRY || "3m";
+const PASSWORD_RESET_TOKEN_SECRET =
+  process.env.PASSWORD_RESET_TOKEN_SECRET || "reset_secret";
+const PASSWORD_RESET_TOKEN_EXPIRY =
+  process.env.PASSWORD_RESET_TOKEN_EXPIRY || "3m";
 
 function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -156,6 +158,7 @@ export const registerUser = async function (req, res) {
         httpOnly: true,
         secure: isProduction,
         sameSite: isProduction ? "Strict" : "Lax",
+        domain: isProduction ? process.env.API_BASE_URL : undefined,
         path: "/",
       });
       res.status(200).json({
@@ -212,6 +215,7 @@ export const loginUser = async function (req, res) {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "Strict" : "Lax",
+      domain: isProduction ? process.env.API_BASE_URL : undefined,
       path: "/",
     });
 
@@ -364,6 +368,7 @@ export const verifyOtp = async (req, res) => {
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? "Strict" : "Lax",
+    domain: isProduction ? process.env.API_BASE_URL : undefined,
     path: "/",
   });
   res
