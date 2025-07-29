@@ -39,7 +39,10 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: "Shipping address is required" });
     }
 
-    if (!paymentMethod || !["cod", "online", "wallet"].includes(paymentMethod)) {
+    if (
+      !paymentMethod ||
+      !["cod", "online", "wallet"].includes(paymentMethod)
+    ) {
       return res
         .status(400)
         .json({ message: "Valid payment method is required" });
@@ -47,7 +50,9 @@ export const createOrder = async (req, res) => {
 
     // Stock validation for each product variant before proceeding
     for (const item of items) {
-      const productVariant = await mongoose.model("ProductVariant").findById(item.productVariantId);
+      const productVariant = await mongoose
+        .model("ProductVariant")
+        .findById(item.productVariantId);
       if (!productVariant) {
         return res.status(400).json({
           message: `Product variant not found for item: ${item.productVariantId}`,
@@ -201,7 +206,10 @@ export const createOrder = async (req, res) => {
         wallet = await Wallet.create({ user: req.user.userId });
       }
       if (wallet.balance < total) {
-        console.error("[WALLET] Insufficient balance for user", req.user.userId);
+        console.error(
+          "[WALLET] Insufficient balance for user",
+          req.user.userId
+        );
         return res.status(400).json({ message: "Insufficient wallet balance" });
       }
       wallet.balance -= total;
@@ -211,7 +219,9 @@ export const createOrder = async (req, res) => {
         description: `Order payment for new order`,
       });
       await wallet.save();
-      console.log(`[WALLET] Deducted INR ${total} from user ${req.user.userId}`);
+      console.log(
+        `[WALLET] Deducted INR ${total} from user ${req.user.userId}`
+      );
       finalPaymentStatus = "paid";
     } else {
       finalPaymentStatus = "pending";
@@ -228,13 +238,13 @@ export const createOrder = async (req, res) => {
           )
         : [];
       return {
-      ...item,
-      itemPaymentStatus:
-        finalPaymentStatus === "paid"
-          ? "paid"
-          : finalPaymentStatus === "failed"
-          ? "failed"
-          : "pending",
+        ...item,
+        itemPaymentStatus:
+          finalPaymentStatus === "paid"
+            ? "paid"
+            : finalPaymentStatus === "failed"
+            ? "failed"
+            : "pending",
         offers: itemOffers, // Attach offers to the item
       };
     });
@@ -256,13 +266,16 @@ export const createOrder = async (req, res) => {
     console.log("Saved order offers:", order.offers);
 
     // Increment usageCount for each offer used in the order (if payment is confirmed)
-    if (finalPaymentStatus === "paid" && Array.isArray(offers) && offers.length > 0) {
+    if (
+      finalPaymentStatus === "paid" &&
+      Array.isArray(offers) &&
+      offers.length > 0
+    ) {
       // offers may be array of offer objects or IDs
-      const offerIds = offers.map(offer => offer._id ? offer._id : offer);
-      await mongoose.model("Offer").updateMany(
-        { _id: { $in: offerIds } },
-        { $inc: { usageCount: 1 } }
-      );
+      const offerIds = offers.map((offer) => (offer._id ? offer._id : offer));
+      await mongoose
+        .model("Offer")
+        .updateMany({ _id: { $in: offerIds } }, { $inc: { usageCount: 1 } });
     }
 
     // Decrement stock for each ordered product variant ONLY if paymentStatus is 'paid'
@@ -274,9 +287,14 @@ export const createOrder = async (req, res) => {
             .findByIdAndUpdate(item.productVariantId, {
               $inc: { stock: -item.quantity },
             });
-          console.log(`[STOCK] Decremented stock for variant ${item.productVariantId} by ${item.quantity}`);
+          console.log(
+            `[STOCK] Decremented stock for variant ${item.productVariantId} by ${item.quantity}`
+          );
         } catch (err) {
-          console.error(`[STOCK] Failed to decrement stock for variant ${item.productVariantId}:`, err);
+          console.error(
+            `[STOCK] Failed to decrement stock for variant ${item.productVariantId}:`,
+            err
+          );
         }
       }
     }
@@ -609,7 +627,8 @@ export const cancelOrder = async (req, res) => {
       }
       // Refund for partial cancellation in online/wallet payment orders
       if (
-        (order.paymentMethod === "online" || order.paymentMethod === "wallet") &&
+        (order.paymentMethod === "online" ||
+          order.paymentMethod === "wallet") &&
         ["paid", "pending"].includes(order.paymentStatus)
       ) {
         const Wallet = mongoose.model("Wallet");
@@ -657,7 +676,9 @@ export const cancelOrder = async (req, res) => {
             wallet.transactions.push({
               type: "credit",
               amount: refundAmount,
-              description: `Refund for cancelled product in order ${order.orderNumber} (${order.paymentMethod.toUpperCase()}) - Refunded by system`,
+              description: `Refund for cancelled product in order ${
+                order.orderNumber
+              } (${order.paymentMethod.toUpperCase()}) - Refunded by system`,
             });
             item.itemPaymentStatus = "refunded";
           }
@@ -714,7 +735,9 @@ export const cancelOrder = async (req, res) => {
       wallet.transactions.push({
         type: "credit",
         amount: order.total,
-        description: `Refund for cancelled order ${order.orderNumber} (${order.paymentMethod.toUpperCase()}) - Refunded by system`,
+        description: `Refund for cancelled order ${
+          order.orderNumber
+        } (${order.paymentMethod.toUpperCase()}) - Refunded by system`,
       });
       await wallet.save();
       order.paymentStatus = "refunded";
@@ -760,7 +783,7 @@ export const checkCODAvailability = async (req, res) => {
     ];
 
     const isLocationRestricted = codRestrictedStates.includes(state);
-    const maxCodAmount = parseFloat(process.env.MAX_COD_AMOUNT) || 50000;
+    const maxCodAmount = parseFloat(process.env.MAX_COD_AMOUNT) || 1000;
     const isAmountRestricted = total > maxCodAmount;
 
     const isAvailable = !isLocationRestricted && !isAmountRestricted;
@@ -883,11 +906,11 @@ export const getAllOrders = async (req, res) => {
     if (search && search.trim() !== "") {
       const searchTerm = search.trim();
       const regex = new RegExp(searchTerm, "i");
-      
-      orders = orders.filter(order => {
+
+      orders = orders.filter((order) => {
         // Order number
         if (order.orderNumber && regex.test(order.orderNumber)) return true;
-        
+
         // User fields
         if (order.user) {
           if (regex.test(order.user.firstName || "")) return true;
@@ -895,15 +918,15 @@ export const getAllOrders = async (req, res) => {
           if (regex.test(order.user.username || "")) return true;
           if (regex.test(order.user.email || "")) return true;
         }
-        
+
         // Product name in any item
         if (order.items && order.items.length > 0) {
-          return order.items.some(item => {
+          return order.items.some((item) => {
             const productName = item.productVariantId?.product?.name;
             return productName && regex.test(productName);
           });
         }
-        
+
         return false;
       });
     }
@@ -915,7 +938,7 @@ export const getAllOrders = async (req, res) => {
     const paginatedOrders = orders.slice(startIndex, endIndex);
 
     // Add computedTotal, computedProportionalDiscount, and couponCode to each order
-    const paginatedOrdersWithTotal = paginatedOrders.map(order => {
+    const paginatedOrdersWithTotal = paginatedOrders.map((order) => {
       const o = order.toObject ? order.toObject() : order;
       // Compute proportional discount
       const allItemsTotal = o.items.reduce(
@@ -923,7 +946,10 @@ export const getAllOrders = async (req, res) => {
           sum +
           (item.price * item.quantity -
             (item.offers
-              ? item.offers.reduce((s, offer) => s + (offer.offerAmount || 0), 0)
+              ? item.offers.reduce(
+                  (s, offer) => s + (offer.offerAmount || 0),
+                  0
+                )
               : 0)),
         0
       );
@@ -934,7 +960,10 @@ export const getAllOrders = async (req, res) => {
             sum +
             (item.price * item.quantity -
               (item.offers
-                ? item.offers.reduce((s, offer) => s + (offer.offerAmount || 0), 0)
+                ? item.offers.reduce(
+                    (s, offer) => s + (offer.offerAmount || 0),
+                    0
+                  )
                 : 0)),
           0
         );
@@ -945,11 +974,17 @@ export const getAllOrders = async (req, res) => {
           ? o.discount
           : 0;
       const proportionalDiscount =
-        allItemsTotal > 0 ? (nonRefundedItemsTotal / allItemsTotal) * discount : 0;
+        allItemsTotal > 0
+          ? (nonRefundedItemsTotal / allItemsTotal) * discount
+          : 0;
       // Extract coupon code
       let couponCode = undefined;
       if (o.discount && typeof o.discount === "object") {
-        couponCode = o.discount.code || o.discount.discountName || o.discount.name || undefined;
+        couponCode =
+          o.discount.code ||
+          o.discount.discountName ||
+          o.discount.name ||
+          undefined;
       }
       return {
         ...o,
@@ -1295,7 +1330,9 @@ export const updateOrderItemStatus = async (req, res) => {
       if (
         paymentStatus === "refunded" &&
         item.itemPaymentStatus !== "refunded" &&
-        (order.paymentMethod === "cod" || order.paymentMethod === "online" || order.paymentMethod === "wallet")
+        (order.paymentMethod === "cod" ||
+          order.paymentMethod === "online" ||
+          order.paymentMethod === "wallet")
       ) {
         const Wallet = mongoose.model("Wallet");
         let wallet = await Wallet.findOne({ user: order.user });
@@ -1360,7 +1397,9 @@ export const checkOrderStock = async (req, res) => {
       return res.status(400).json({ message: "No items provided" });
     }
     for (const item of items) {
-      const productVariant = await mongoose.model("ProductVariant").findById(item.productVariantId);
+      const productVariant = await mongoose
+        .model("ProductVariant")
+        .findById(item.productVariantId);
       if (!productVariant) {
         return res.status(400).json({
           message: `Product variant not found for item: ${item.productVariantId}`,
@@ -1368,12 +1407,16 @@ export const checkOrderStock = async (req, res) => {
       }
       if (productVariant.stock < item.quantity) {
         return res.status(400).json({
-          message: `Insufficient stock for ${productVariant.colour || ''} ${productVariant.capacity || ''}. Only ${productVariant.stock} left.`,
+          message: `Insufficient stock for ${productVariant.colour || ""} ${
+            productVariant.capacity || ""
+          }. Only ${productVariant.stock} left.`,
           productVariantId: item.productVariantId,
         });
       }
     }
-    return res.status(200).json({ success: true, message: "All items in stock" });
+    return res
+      .status(200)
+      .json({ success: true, message: "All items in stock" });
   } catch (error) {
     console.error("Error checking order stock:", error);
     return res.status(500).json({ message: "Internal server error" });

@@ -20,23 +20,36 @@ dotenv.config();
 
 const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 5000;
+const NODE_ENV = process.env.NODE_ENV || "development";
+
+// Log current environment
+console.log(`Running in ${NODE_ENV} mode`);
 
 // app.use(cors());
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
 
-      const allowedOrigins = process.env.ALLOWED_ORIGINS;
-
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
+      if (NODE_ENV === "development") {
+        const allowedDevOrigins = ["http://localhost:8080"];
+        if (allowedDevOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+      } else {
+        const allowedProdOrigins =
+          process.env.ALLOWED_ORIGINS?.split(",") || [];
+        if (allowedProdOrigins.includes(origin)) {
+          return callback(null, true);
+        }
       }
+
+      return callback(new Error("Not allowed by CORS"));
     },
-    credentials: true, // allow cookies and credentials
+    credentials: true,
   })
 );
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
