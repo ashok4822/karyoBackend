@@ -3,7 +3,7 @@ import { getProfile, updateProfile, uploadProfileImage, createShippingAddress, g
 import { getUserEligibleDiscounts, validateCouponCode } from "../controllers/discountController.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
 import { returnOrder } from '../controllers/orderController.js';
-import { getWallet, addFunds, deductFunds, getTransactions } from "../controllers/walletController.js";
+import { getWallet, addFunds, deductFunds, getTransactions, createWalletRazorpayOrder, verifyWalletPayment } from "../controllers/walletController.js";
 import { upload } from "../middleware/upload.js";
 
 const router = express.Router();
@@ -25,6 +25,8 @@ router.get("/wallet", verifyToken, getWallet);
 router.post("/wallet/add", verifyToken, addFunds);
 router.post("/wallet/deduct", verifyToken, deductFunds);
 router.get("/wallet/transactions", verifyToken, getTransactions);
+router.post("/wallet/razorpay/order", verifyToken, createWalletRazorpayOrder);
+router.post("/wallet/razorpay/verify", verifyToken, verifyWalletPayment);
 
 export default router;
 

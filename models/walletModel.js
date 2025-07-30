@@ -18,6 +18,14 @@ const walletTransactionSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
+  paymentId: {
+    type: String,
+    default: null,
+  },
+  orderId: {
+    type: String,
+    default: null,
+  },
 });
 
 const walletSchema = new mongoose.Schema({

@@ -3,7 +3,6 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import Referral from '../models/referralModel.js';
 import { generateReferralReward } from '../controllers/referralController.js';
 import User from "../models/userModel.js";
-import { generateUniqueReferralCode } from '../utils/referralCodeGenerator.js';
 
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
@@ -15,7 +14,7 @@ passport.use(new GoogleStrategy({
     const email = profile.emails[0].value;
     let user = await User.findOne({ email });
     if (user && user.isDeleted) {
-      return done(new Error("Your account has been blocked. Please contact support."));
+      return done(null, false, { message: "Your account has been blocked. Please contact support." });
     }
     let isNewUser = false;
     if (!user) {
@@ -31,7 +30,6 @@ passport.use(new GoogleStrategy({
         email,
         password: Math.random().toString(36).slice(-8),
         mobileNo: undefined,
-        referralCode: await generateUniqueReferralCode(username),
       });
       isNewUser = true;
     }
