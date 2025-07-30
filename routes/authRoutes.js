@@ -58,11 +58,41 @@ router.get(
 
 router.get(
   "/google/callback",
-  passport.authenticate("google", {
-    failureRedirect:
-      process.env.LOGIN_FAILURE_REDIRECT_URL || "http://localhost:8080/login",
-    session: false,
-  }),
+  (req, res, next) => {
+    passport.authenticate("google", { session: false }, (err, user, info) => {
+      if (err) {
+        // Handle authentication errors (like blocked user)
+        const failureRedirectUrl = process.env.LOGIN_FAILURE_REDIRECT_URL || "http://localhost:8080/login";
+        const errorMessage = encodeURIComponent(err.message || "Authentication failed");
+        return res.redirect(`${failureRedirectUrl}?error=${errorMessage}`);
+      }
+      
+      if (!user) {
+        // Handle case where no user is returned
+        const failureRedirectUrl = process.env.LOGIN_FAILURE_REDIRECT_URL || "http://localhost:8080/login";
+        const errorMessage = encodeURIComponent("Authentication failed");
+        return res.redirect(`${failureRedirectUrl}?error=${errorMessage}`);
+      }
+      
+      // Check if user is blocked
+      if (user.isDeleted) {
+        const failureRedirectUrl = process.env.LOGIN_FAILURE_REDIRECT_URL || "http://localhost:8080/login";
+        const errorMessage = encodeURIComponent("Your account has been blocked. Please contact support.");
+        return res.redirect(`${failureRedirectUrl}?error=${errorMessage}`);
+      }
+      
+      // Check if user is admin
+      if (user.role === "admin") {
+        const failureRedirectUrl = process.env.LOGIN_FAILURE_REDIRECT_URL || "http://localhost:8080/login";
+        const errorMessage = encodeURIComponent("Admins must log in through the admin login page.");
+        return res.redirect(`${failureRedirectUrl}?error=${errorMessage}`);
+      }
+      
+      // Store user in request for the next middleware
+      req.user = user;
+      next();
+    })(req, res, next);
+  },
   (req, res) => {
     // Generate JWT tokens
     const accessToken = generateAccessToken(req.user);

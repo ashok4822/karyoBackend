@@ -84,6 +84,12 @@ export const blockUnblockUser = async function (req, res) {
     const userId = req.params.id;
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
+    
+    // Prevent blocking admin users
+    if (user.role === "admin") {
+      return res.status(403).json({ message: "Cannot block admin users" });
+    }
+    
     user.isDeleted = !user.isDeleted;
     await user.save();
     res.json({

@@ -1140,7 +1140,10 @@ export const deleteVariant = async (req, res) => {
 export const updateVariant = async (req, res) => {
   try {
     const { productId, variantId } = req.params;
-    const { colour, capacity, price, stock, status } = req.body;
+    const { colour, capacity, price, stock, status, removedOldImages } = req.body;
+    
+    console.log("UpdateVariant - removedOldImages:", removedOldImages);
+    console.log("UpdateVariant - files count:", req.files?.images?.length || 0);
 
     // Check if product exists
     const product = await Product.findById(productId);
@@ -1168,10 +1171,30 @@ export const updateVariant = async (req, res) => {
       console.log("Variant status updated to:", status);
     }
 
+    // Handle removed old images
+    let updatedImageUrls = [...variant.imageUrls];
+    console.log("Original imageUrls:", variant.imageUrls);
+    if (removedOldImages) {
+      try {
+        const removedIndices = JSON.parse(removedOldImages);
+        console.log("Parsed removedIndices:", removedIndices);
+        // Remove images at the specified indices (in reverse order to maintain correct indices)
+        removedIndices.sort((a, b) => b - a).forEach(index => {
+          if (index >= 0 && index < updatedImageUrls.length) {
+            console.log(`Removing image at index ${index}:`, updatedImageUrls[index]);
+            updatedImageUrls.splice(index, 1);
+          }
+        });
+        console.log("Updated imageUrls after removal:", updatedImageUrls);
+      } catch (parseError) {
+        console.error("Error parsing removedOldImages:", parseError);
+      }
+    }
+
     // Handle image update if new images are provided
     const variantImages = req.files?.images || [];
     if (variantImages.length > 0) {
-      const variantImageUrls = [];
+      const newImageUrls = [];
       const tempFiles = [];
       try {
         for (let i = 0; i < variantImages.length; i++) {
@@ -1203,7 +1226,7 @@ export const updateVariant = async (req, res) => {
             result = await cloudinary.uploader.upload(tempPath, {
               folder: "product-variants",
             });
-            variantImageUrls.push(result.secure_url);
+            newImageUrls.push(result.secure_url);
           } catch (cloudinaryError) {
             console.error("Cloudinary upload error:", cloudinaryError);
             throw new Error(
@@ -1226,8 +1249,18 @@ export const updateVariant = async (req, res) => {
           }
         }
       }
-      // Replace the imageUrls array
-      variant.imageUrls = variantImageUrls;
+      // Combine remaining old images with new images
+      variant.imageUrls = [...updatedImageUrls, ...newImageUrls];
+    } else {
+      // If no new images, just update with removed old images
+      variant.imageUrls = updatedImageUrls;
+    }
+
+    // Validate minimum images requirement
+    if (variant.imageUrls.length < 3) {
+      return res.status(400).json({ 
+        message: "Minimum 3 images required for a variant" 
+      });
     }
 
     await variant.save();
