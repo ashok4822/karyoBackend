@@ -38,7 +38,7 @@ app.use(
         }
       } else {
         const allowedProdOrigins =
-          process.env.ALLOWED_ORIGINS?.split(",") || [];
+          process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()) || [];
         if (allowedProdOrigins.includes(origin)) {
           return callback(null, true);
         }
