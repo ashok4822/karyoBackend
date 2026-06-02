@@ -17,6 +17,7 @@
     "jsonwebtoken": "^9.0.2",
     "jspdf": "^3.0.1",
     "jspdf-autotable": "^5.0.2",
+    "mongodb": "^7.1.0",
     "mongoose": "^8.16.0",
     "multer": "^2.0.1",
     "nodemailer": "^7.0.3",
