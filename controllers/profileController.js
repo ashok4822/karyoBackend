@@ -1,7 +1,7 @@
 import User from "../models/userModel.js";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
-import cloudinary from "../config/cloudinary.js";
+import cloudinary, { uploadFromBuffer } from "../config/cloudinary.js";
 import ShippingAddress from "../models/shippingAddressModel.js";
 import { body, validationResult } from "express-validator";
 import Otp from "../models/otpModel.js";
@@ -160,8 +160,8 @@ export const uploadProfileImage = async function (req, res) {
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
     }
-    // Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(req.file.path, {
+    // Upload to Cloudinary using memory buffer
+    const result = await uploadFromBuffer(req.file.buffer, {
       folder: "user-profile-images",
       width: 300,
       height: 300,
@@ -173,15 +173,6 @@ export const uploadProfileImage = async function (req, res) {
       { $set: { profileImage: result.secure_url } },
       { new: true }
     );
-    // Delete local file after upload
-    const fs = await import('fs');
-    try {
-      if (fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-    } catch (err) {
-      console.log('Error deleting profile image file:', err.message);
-    }
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
