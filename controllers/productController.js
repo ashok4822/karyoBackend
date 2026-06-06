@@ -1,6 +1,6 @@
 import Product from "../models/productModel.js";
 import ProductVariant from "../models/productVariantModel.js";
-import cloudinary from "../config/cloudinary.js";
+import cloudinary, { uploadFromBuffer } from "../config/cloudinary.js";
 import sharp from "sharp";
 import fs from "fs";
 import mongoose from "mongoose";
@@ -160,7 +160,6 @@ export const addProduct = async (req, res) => {
     if (!hasVariants) {
       // Handle product-level images
       const imageUrls = [];
-      const tempFiles = [];
       const productImages = req.files?.images || [];
 
       try {
@@ -186,17 +185,10 @@ export const addProduct = async (req, res) => {
             );
           }
 
-          // Save temp file for Cloudinary upload
-          const tempPath = `uploads/${
-            file.fieldname
-          }-${Date.now()}-${Math.round(Math.random() * 1e9)}-resized.jpg`;
-          fs.writeFileSync(tempPath, buffer);
-          tempFiles.push(tempPath);
-
-          // Upload to Cloudinary with error handling
+          // Upload directly to Cloudinary using in-memory stream
           let result;
           try {
-            result = await cloudinary.uploader.upload(tempPath, {
+            result = await uploadFromBuffer(buffer, {
               folder: "products",
             });
             imageUrls.push(result.secure_url);
@@ -218,17 +210,6 @@ export const addProduct = async (req, res) => {
       } catch (processingError) {
         console.error("Image processing error:", processingError);
         return res.status(500).json({ message: processingError.message });
-      } finally {
-        // Clean up temporary files
-        for (const tempFile of tempFiles) {
-          try {
-            if (fs.existsSync(tempFile)) {
-              fs.unlinkSync(tempFile);
-            }
-          } catch (err) {
-            console.log("Error deleting temp file:", err.message);
-          }
-        }
       }
     }
 
@@ -248,7 +229,6 @@ export const addProduct = async (req, res) => {
 
         // Handle variant-specific images
         let variantImageUrls = [];
-        const tempFiles = [];
         const variantImages = req.files[`variantImages_${i}`] || [];
 
         try {
@@ -278,16 +258,10 @@ export const addProduct = async (req, res) => {
               );
             }
 
-            const tempPath = `uploads/${
-              file.fieldname
-            }-${Date.now()}-${Math.round(Math.random() * 1e9)}-resized.jpg`;
-            fs.writeFileSync(tempPath, buffer);
-            tempFiles.push(tempPath);
-
-            // Upload to Cloudinary with error handling
+            // Upload directly to Cloudinary using in-memory stream
             let result;
             try {
-              result = await cloudinary.uploader.upload(tempPath, {
+              result = await uploadFromBuffer(buffer, {
                 folder: "product-variants",
               });
               variantImageUrls.push(result.secure_url);
@@ -305,27 +279,6 @@ export const addProduct = async (req, res) => {
         } catch (processingError) {
           console.error("Variant image processing error:", processingError);
           return res.status(500).json({ message: processingError.message });
-        } finally {
-          // Clean up temporary files for this variant
-          for (const tempFile of tempFiles) {
-            try {
-              console.log(
-                `[CLEANUP] Attempting to delete temp file: ${tempFile}`
-              );
-              if (fs.existsSync(tempFile)) {
-                fs.unlinkSync(tempFile);
-                console.log(`[CLEANUP] Deleted temp file: ${tempFile}`);
-              } else {
-                console.log(
-                  `[CLEANUP] Temp file not found (already deleted?): ${tempFile}`
-                );
-              }
-            } catch (err) {
-              console.log(
-                `[CLEANUP] Error deleting temp file: ${tempFile} - ${err.message}`
-              );
-            }
-          }
         }
 
         const variant = new ProductVariant({
@@ -860,7 +813,6 @@ export const editProduct = async (req, res) => {
     // Handle images if uploaded (for backward compatibility)
     if (req.files && req.files.length > 0) {
       const imageUrls = [];
-      const tempFiles = [];
 
       try {
         for (let i = 0; i < req.files.length; i++) {
@@ -868,13 +820,8 @@ export const editProduct = async (req, res) => {
           const buffer = await sharp(file.buffer)
             .resize(600, 600, { fit: "cover" })
             .toBuffer();
-          const tempPath = `uploads/${
-            file.fieldname
-          }-${Date.now()}-${Math.round(Math.random() * 1e9)}-resized.jpg`;
-          fs.writeFileSync(tempPath, buffer);
-          tempFiles.push(tempPath);
 
-          const result = await cloudinary.uploader.upload(tempPath, {
+          const result = await uploadFromBuffer(buffer, {
             folder: "products",
           });
           imageUrls.push(result.secure_url);
@@ -882,17 +829,9 @@ export const editProduct = async (req, res) => {
 
         product.mainImage = imageUrls[0];
         product.otherImages = imageUrls.slice(1);
-      } finally {
-        // Clean up temporary files
-        for (const tempFile of tempFiles) {
-          try {
-            if (fs.existsSync(tempFile)) {
-              fs.unlinkSync(tempFile);
-            }
-          } catch (err) {
-            console.log("Error deleting temp file:", err.message);
-          }
-        }
+      } catch (processingError) {
+        console.error("Image processing error:", processingError);
+        return res.status(500).json({ message: processingError.message });
       }
     }
 
@@ -914,7 +853,6 @@ export const editProduct = async (req, res) => {
 
         // Handle variant-specific images
         let variantImageUrls = [];
-        const tempFiles = [];
         const variantImages = req.files[`variantImages_${i}`] || [];
 
         try {
@@ -944,16 +882,10 @@ export const editProduct = async (req, res) => {
               );
             }
 
-            const tempPath = `uploads/${
-              file.fieldname
-            }-${Date.now()}-${Math.round(Math.random() * 1e9)}-resized.jpg`;
-            fs.writeFileSync(tempPath, buffer);
-            tempFiles.push(tempPath);
-
-            // Upload to Cloudinary with error handling
+            // Upload directly to Cloudinary using in-memory stream
             let result;
             try {
-              result = await cloudinary.uploader.upload(tempPath, {
+              result = await uploadFromBuffer(buffer, {
                 folder: "product-variants",
               });
               variantImageUrls.push(result.secure_url);
@@ -971,17 +903,6 @@ export const editProduct = async (req, res) => {
         } catch (processingError) {
           console.error("Variant image processing error:", processingError);
           return res.status(500).json({ message: processingError.message });
-        } finally {
-          // Clean up temporary files for this variant
-          for (const tempFile of tempFiles) {
-            try {
-              if (fs.existsSync(tempFile)) {
-                fs.unlinkSync(tempFile);
-              }
-            } catch (err) {
-              console.log("Error deleting temp file:", err.message);
-            }
-          }
         }
 
         // Set variant status to inactive if product is inactive
@@ -1195,7 +1116,6 @@ export const updateVariant = async (req, res) => {
     const variantImages = req.files?.images || [];
     if (variantImages.length > 0) {
       const newImageUrls = [];
-      const tempFiles = [];
       try {
         for (let i = 0; i < variantImages.length; i++) {
           const file = variantImages[i];
@@ -1215,15 +1135,10 @@ export const updateVariant = async (req, res) => {
               `Failed to process image ${file.originalname}: ${sharpError.message}`
             );
           }
-          const tempPath = `uploads/${
-            file.fieldname
-          }-${Date.now()}-${Math.round(Math.random() * 1e9)}-resized.jpg`;
-          fs.writeFileSync(tempPath, buffer);
-          tempFiles.push(tempPath);
-          // Upload to Cloudinary
+          // Upload directly to Cloudinary using in-memory stream
           let result;
           try {
-            result = await cloudinary.uploader.upload(tempPath, {
+            result = await uploadFromBuffer(buffer, {
               folder: "product-variants",
             });
             newImageUrls.push(result.secure_url);
@@ -1237,17 +1152,6 @@ export const updateVariant = async (req, res) => {
       } catch (processingError) {
         console.error("Variant image processing error:", processingError);
         return res.status(500).json({ message: processingError.message });
-      } finally {
-        // Clean up temporary files
-        for (const tempFile of tempFiles) {
-          try {
-            if (fs.existsSync(tempFile)) {
-              fs.unlinkSync(tempFile);
-            }
-          } catch (err) {
-            console.log("Error deleting temp file:", err.message);
-          }
-        }
       }
       // Combine remaining old images with new images
       variant.imageUrls = [...updatedImageUrls, ...newImageUrls];
@@ -1317,8 +1221,6 @@ export const addVariant = async (req, res) => {
 
     // Handle variant images
     const variantImageUrls = [];
-    const tempFiles = [];
-
     try {
       for (let i = 0; i < variantImages.length; i++) {
         const file = variantImages[i];
@@ -1342,16 +1244,10 @@ export const addVariant = async (req, res) => {
           );
         }
 
-        const tempPath = `uploads/${file.fieldname}-${Date.now()}-${Math.round(
-          Math.random() * 1e9
-        )}-resized.jpg`;
-        fs.writeFileSync(tempPath, buffer);
-        tempFiles.push(tempPath);
-
-        // Upload to Cloudinary with error handling
+        // Upload directly to Cloudinary using in-memory stream
         let result;
         try {
-          result = await cloudinary.uploader.upload(tempPath, {
+          result = await uploadFromBuffer(buffer, {
             folder: "product-variants",
           });
           variantImageUrls.push(result.secure_url);
@@ -1369,25 +1265,6 @@ export const addVariant = async (req, res) => {
     } catch (processingError) {
       console.error("Image processing error:", processingError);
       return res.status(500).json({ message: processingError.message });
-    } finally {
-      // Clean up temporary files
-      for (const tempFile of tempFiles) {
-        try {
-          console.log(`[CLEANUP] Attempting to delete temp file: ${tempFile}`);
-          if (fs.existsSync(tempFile)) {
-            fs.unlinkSync(tempFile);
-            console.log(`[CLEANUP] Deleted temp file: ${tempFile}`);
-          } else {
-            console.log(
-              `[CLEANUP] Temp file not found (already deleted?): ${tempFile}`
-            );
-          }
-        } catch (err) {
-          console.log(
-            `[CLEANUP] Error deleting temp file: ${tempFile} - ${err.message}`
-          );
-        }
-      }
     }
 
     // Validate numeric fields

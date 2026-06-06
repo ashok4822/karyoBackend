@@ -1,4 +1,8 @@
 import mongoose from "mongoose";
+import dns from "node:dns";
+
+// Force Node.js to use Google DNS for resolving SRV records (fixes NVM/Windows DNS bug)
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 const connectDB = async () => {
   try {

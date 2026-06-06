@@ -1,24 +1,6 @@
 import multer from "multer";
-import path from "path";
-import fs from "fs";
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Multer storage for disk (used in userRoutes.js)
-export const diskStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/");
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname));
-  },
-});
-
-// Multer memory storage (used in adminRoutes.js)
+// Multer memory storage (used for both user and admin uploads)
 export const memoryStorage = multer.memoryStorage();
 
 // File filter for images
@@ -30,8 +12,14 @@ export const fileFilter = (req, file, cb) => {
   }
 };
 
-// General upload for user profile images (disk storage)
-export const upload = multer({ storage: diskStorage });
+// General upload for user profile images (memory storage)
+export const upload = multer({
+  storage: memoryStorage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+});
 
 // General upload for admin (memory storage)
 export const uploadMemory = multer({
