@@ -245,12 +245,19 @@ export const requestOtp = async (req, res) => {
   const otp = generateOtp();
   await Otp.deleteMany({ email });
   await Otp.create({ email, otp });
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: "Your Signup OTP Code",
-    text: `Your OTP code is: ${otp}`,
-  });
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Your Signup OTP Code",
+      text: `Your OTP code is: ${otp}`,
+    });
+  } catch (mailError) {
+    console.error("Failed to send signup OTP email:", mailError.message);
+    return res
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
+      .json({ message: "Failed to send OTP email. Please try again later." });
+  }
   res.json({ message: MESSAGES.AUTH.OTP_SENT });
 };
 
@@ -385,12 +392,19 @@ export const requestPasswordResetOtp = async (req, res) => {
   const otp = generateOtp();
   await Otp.deleteMany({ email });
   const otpDoc = await Otp.create({ email, otp });
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: "Your Password Reset OTP Code",
-    text: `Your OTP code is: ${otp}`,
-  });
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Your Password Reset OTP Code",
+      text: `Your OTP code is: ${otp}`,
+    });
+  } catch (mailError) {
+    console.error("Failed to send password reset OTP email:", mailError.message);
+    return res
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
+      .json({ message: "Failed to send OTP email. Please try again later." });
+  }
   res.json({
     message: "OTP sent to email",
     expiresAt: new Date(otpDoc.createdAt).getTime() + OTP_EXPIRY_SECONDS * 1000, // ms timestamp
