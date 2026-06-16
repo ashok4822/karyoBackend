@@ -1,3 +1,4 @@
+import { statusCodes } from "../constants/statusCodes.js";
 import multer from "multer";
 
 // Multer memory storage (used for both user and admin uploads)
@@ -57,18 +58,18 @@ export const uploadProduct = multer({
 export const handleMulterError = (error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === "LIMIT_FILE_SIZE") {
-      return res.status(400).json({ message: "File too large. Maximum size is 5MB." });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: "File too large. Maximum size is 5MB." });
     }
     if (error.code === "LIMIT_FILE_COUNT") {
-      return res.status(400).json({ message: "Too many files. Maximum is 50 files." });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: "Too many files. Maximum is 50 files." });
     }
     if (error.code === "LIMIT_UNEXPECTED_FILE") {
-      return res.status(400).json({ message: "Unexpected file field." });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: "Unexpected file field." });
     }
-    return res.status(400).json({ message: `Upload error: ${error.message}` });
+    return res.status(statusCodes.BAD_REQUEST).json({ message: `Upload error: ${error.message}` });
   }
   if (error) {
-    return res.status(400).json({ message: error.message });
+    return res.status(statusCodes.BAD_REQUEST).json({ message: error.message });
   }
   next();
 }; 

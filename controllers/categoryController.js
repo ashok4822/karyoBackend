@@ -1,3 +1,4 @@
+import { statusCodes } from "../constants/statusCodes.js";
 import Category from "../models/categoryModel.js";
 
 // List categories with search, pagination, sort, and filter by status
@@ -40,7 +41,7 @@ export const listCategories = async (req, res) => {
     });
   } catch (error) {
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -49,7 +50,7 @@ export const listCategories = async (req, res) => {
 export const addCategory = async (req, res) => {
   try {
     const { name, status } = req.body;
-    if (!name) return res.status(400).json({ message: "Name is required" });
+    if (!name) return res.status(statusCodes.BAD_REQUEST).json({ message: "Name is required" });
 
     // Check if category exists (excluding deleted ones)
     const exists = await Category.findOne({
@@ -57,14 +58,14 @@ export const addCategory = async (req, res) => {
       status: { $ne: "deleted" },
     });
     if (exists)
-      return res.status(400).json({ message: "Category already exists" });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: "Category already exists" });
 
     const category = new Category({ name, status });
     await category.save();
-    res.status(201).json({ message: "Category created", category });
+    res.status(statusCodes.CREATED).json({ message: "Category created", category });
   } catch (error) {
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -77,7 +78,7 @@ export const editCategory = async (req, res) => {
 
     const category = await Category.findById(id);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ message: "Category not found" });
 
     // If changing name, check if it already exists (excluding deleted ones and current category)
     if (name && name !== category.name) {
@@ -88,7 +89,7 @@ export const editCategory = async (req, res) => {
       });
       if (exists)
         return res
-          .status(400)
+          .status(statusCodes.BAD_REQUEST)
           .json({ message: "Category name already exists" });
     }
 
@@ -99,7 +100,7 @@ export const editCategory = async (req, res) => {
     res.json({ message: "Category updated", category });
   } catch (error) {
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -110,7 +111,7 @@ export const deleteCategory = async (req, res) => {
     const { id } = req.params;
     const category = await Category.findById(id);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ message: "Category not found" });
 
     category.status = "deleted";
     category.isDeleted = true; // <-- Set isDeleted to true
@@ -118,7 +119,7 @@ export const deleteCategory = async (req, res) => {
     res.json({ message: "Category deleted" });
   } catch (error) {
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -129,10 +130,10 @@ export const restoreCategory = async (req, res) => {
     const { id } = req.params;
     const category = await Category.findById(id);
     if (!category)
-      return res.status(404).json({ message: "Category not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ message: "Category not found" });
 
     if (category.status !== "deleted") {
-      return res.status(400).json({ message: "Category is not deleted" });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: "Category is not deleted" });
     }
 
     category.status = "active";
@@ -141,7 +142,7 @@ export const restoreCategory = async (req, res) => {
     res.json({ message: "Category restored", category });
   } catch (error) {
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -156,7 +157,7 @@ export const getActiveCategories = async (req, res) => {
     res.json({ categories });
   } catch (error) {
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };

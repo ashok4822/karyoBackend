@@ -1,3 +1,4 @@
+import { statusCodes } from "../constants/statusCodes.js";
 import Order from "../models/orderModel.js";
 import Product from "../models/productModel.js";
 import Category from "../models/categoryModel.js";
@@ -303,7 +304,7 @@ export const getDashboard = async (req, res) => {
     });
   } catch (error) {
     console.error("Dashboard analytics error:", error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ success: false, error: error.message });
   }
 };
 
@@ -456,6 +457,6 @@ export const generateLedgerBook = async (req, res) => {
 
   } catch (error) {
     console.error("Ledger book generation error:", error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ success: false, error: error.message });
   }
 };

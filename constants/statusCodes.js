@@ -1,4 +1,4 @@
-export const statusCodes = {
+export const statusCodes = Object.freeze({
   OK: 200,
   CREATED: 201,
   ACCEPTED: 202,
@@ -13,4 +13,4 @@ export const statusCodes = {
   NOT_IMPLEMENTED: 501,
   BAD_GATEWAY: 502,
   SERVICE_UNAVAILABLE: 503,
-};
+});

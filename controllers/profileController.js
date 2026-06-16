@@ -1,3 +1,5 @@
+import { statusCodes } from "../constants/statusCodes.js";
+import { MESSAGES } from "../constants/messages.js";
 import User from "../models/userModel.js";
 import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
@@ -21,9 +23,9 @@ export const logout = async function (req, res) {
       sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax",
       path: '/',
     });
-    res.status(200).json({ message: `Successfully Logged out!` });
+    res.status(statusCodes.OK).json({ message: MESSAGES.AUTH.LOGOUT_SUCCESS });
   } catch (error) {
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ message: `${MESSAGES.GENERAL.INTERNAL_SERVER_ERROR}: ${error.message}` });
   }
 };
 
@@ -39,9 +41,9 @@ export const adminLogout = async function (req, res) {
       sameSite: process.env.NODE_ENV === "production" ? "Strict" : "Lax",
       path: '/admin',
     });
-    res.status(200).json({ message: `Successfully Logged out!` });
+    res.status(statusCodes.OK).json({ message: MESSAGES.AUTH.LOGOUT_SUCCESS });
   } catch (error) {
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ message: `${MESSAGES.GENERAL.INTERNAL_SERVER_ERROR}: ${error.message}` });
   }
 };
 
@@ -52,16 +54,16 @@ export const updateProfile = async function (req, res) {
 
     // Validation
     if (!firstName || typeof firstName !== "string" || !/^[A-Za-z]{2,30}$/.test(firstName.trim())) {
-      return res.status(400).json({ message: "First name is required and must be 2-30 letters." });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.VALIDATION.FIRST_NAME });
     }
     if (!lastName || typeof lastName !== "string" || !/^[A-Za-z]{2,30}$/.test(lastName.trim())) {
-      return res.status(400).json({ message: "Last name is required and must be 2-30 letters." });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.VALIDATION.LAST_NAME });
     }
     if (!mobileNo || typeof mobileNo !== "string" || !/^\d{10}$/.test(mobileNo.trim())) {
-      return res.status(400).json({ message: "Mobile number is required and must be 10 digits." });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.VALIDATION.MOBILE_REQUIRED });
     }
     if (!address || typeof address !== "string" || address.trim().length < 5 || address.trim().length > 100) {
-      return res.status(400).json({ message: "Address is required and must be 5-100 characters." });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.VALIDATION.ADDRESS_REQUIRED });
     }
 
     // If mobile number is being updated, check for uniqueness
@@ -71,8 +73,8 @@ export const updateProfile = async function (req, res) {
         _id: { $ne: userId },
       });
       if (existingUser) {
-        return res.status(400).json({
-          message: `Mobile number is already registered with another account`,
+        return res.status(statusCodes.BAD_REQUEST).json({
+          message: MESSAGES.VALIDATION.MOBILE_TAKEN,
         });
       }
     }
@@ -92,10 +94,10 @@ export const updateProfile = async function (req, res) {
     );
 
     if (!user) {
-      return res.status(404).json({ message: `User not found` });
+      return res.status(statusCodes.NOT_FOUND).json({ message: MESSAGES.GENERAL.USER_NOT_FOUND });
     }
 
-    res.status(200).json({
+    res.status(statusCodes.OK).json({
       message: `Profile updated successfully`,
       user: {
         id: user._id,
@@ -112,8 +114,8 @@ export const updateProfile = async function (req, res) {
     });
   } catch (error) {
     res
-      .status(500)
-      .json({ message: `Internal Server Error: ${error.message}` });
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
+      .json({ message: `${MESSAGES.GENERAL.INTERNAL_SERVER_ERROR}: ${error.message}` });
   }
 };
 
@@ -123,15 +125,14 @@ export const getProfile = async function (req, res) {
     console.log("[getProfile] Request from user:", userId);
     
     const user = await User.findById(userId).select("-password -refreshToken");
-    // console.log(user);
 
     if (!user) {
       console.log("[getProfile] User not found:", userId);
-      return res.status(404).json({ message: `User not found` });
+      return res.status(statusCodes.NOT_FOUND).json({ message: MESSAGES.GENERAL.USER_NOT_FOUND });
     }
 
     console.log("[getProfile] Profile retrieved successfully for:", user.email);
-    res.status(200).json({
+    res.status(statusCodes.OK).json({
       user: {
         id: user._id,
         username: user.username,
@@ -149,8 +150,8 @@ export const getProfile = async function (req, res) {
   } catch (error) {
     console.log("[getProfile] Error:", error.message);
     res
-      .status(500)
-      .json({ message: `Internal Server Error: ${error.message}` });
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
+      .json({ message: `${MESSAGES.GENERAL.INTERNAL_SERVER_ERROR}: ${error.message}` });
   }
 };
 
@@ -158,7 +159,7 @@ export const uploadProfileImage = async function (req, res) {
   try {
     const userId = req.user.userId;
     if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.VALIDATION.NO_FILE });
     }
     // Upload to Cloudinary using memory buffer
     const result = await uploadFromBuffer(req.file.buffer, {
@@ -174,14 +175,14 @@ export const uploadProfileImage = async function (req, res) {
       { new: true }
     );
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ message: MESSAGES.GENERAL.USER_NOT_FOUND });
     }
-    res.status(200).json({
+    res.status(statusCodes.OK).json({
       message: "Profile image updated successfully",
       profileImage: user.profileImage,
     });
   } catch (error) {
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ message: `${MESSAGES.GENERAL.INTERNAL_SERVER_ERROR}: ${error.message}` });
   }
 };
 
@@ -203,28 +204,28 @@ export const createShippingAddress = async (req, res) => {
     // Backend validation
     const errors = {};
     if (!recipientName || typeof recipientName !== 'string' || recipientName.trim().length < 2 || recipientName.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(recipientName.trim())) {
-      errors.recipientName = 'Recipient name is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+      errors.recipientName = MESSAGES.SHIPPING.RECIPIENT_NAME;
     }
     if (!addressLine1 || typeof addressLine1 !== 'string' || addressLine1.trim().length < 5 || addressLine1.trim().length > 100) {
-      errors.addressLine1 = 'Address Line 1 is required and must be 5-100 characters.';
+      errors.addressLine1 = MESSAGES.SHIPPING.ADDRESS_LINE1;
     }
     if (!city || typeof city !== 'string' || city.trim().length < 2 || city.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(city.trim())) {
-      errors.city = 'City is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+      errors.city = MESSAGES.SHIPPING.CITY;
     }
     if (!state || typeof state !== 'string' || state.trim().length < 2 || state.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(state.trim())) {
-      errors.state = 'State is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+      errors.state = MESSAGES.SHIPPING.STATE;
     }
     if (!postalCode || typeof postalCode !== 'string' || postalCode.trim().length < 4 || postalCode.trim().length > 10 || !/^\d{4,10}$/.test(postalCode.trim())) {
-      errors.postalCode = 'Postal code is required and must be 4-10 digits.';
+      errors.postalCode = MESSAGES.SHIPPING.POSTAL_CODE;
     }
     if (!country || typeof country !== 'string' || country.trim().length < 2 || country.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(country.trim())) {
-      errors.country = 'Country is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+      errors.country = MESSAGES.SHIPPING.COUNTRY;
     }
     if (!phoneNumber || typeof phoneNumber !== 'string' || !/^\d{10,15}$/.test(phoneNumber.trim())) {
-      errors.phoneNumber = 'Phone number is required and must be 10-15 digits.';
+      errors.phoneNumber = MESSAGES.SHIPPING.PHONE;
     }
     if (Object.keys(errors).length > 0) {
-      return res.status(400).json({ message: 'Validation failed', errors });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.SHIPPING.VALIDATION_FAILED, errors });
     }
 
     // If isDefault is true, unset previous default
@@ -245,9 +246,9 @@ export const createShippingAddress = async (req, res) => {
       isDefault: !!isDefault,
     });
     await address.save();
-    res.status(201).json({ message: "Shipping address added", address });
+    res.status(statusCodes.CREATED).json({ message: MESSAGES.SHIPPING.ADDRESS_ADDED, address });
   } catch (error) {
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ message: `${MESSAGES.GENERAL.INTERNAL_SERVER_ERROR}: ${error.message}` });
   }
 };
 
@@ -255,9 +256,9 @@ export const getShippingAddresses = async (req, res) => {
   try {
     const userId = req.user.userId;
     const addresses = await ShippingAddress.find({ user: userId }).sort({ isDefault: -1, createdAt: -1 });
-    res.status(200).json({ addresses });
+    res.status(statusCodes.OK).json({ addresses });
   } catch (error) {
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ message: `${MESSAGES.GENERAL.INTERNAL_SERVER_ERROR}: ${error.message}` });
   }
 };
 
@@ -269,10 +270,10 @@ export const setDefaultShippingAddress = async (req, res) => {
     await ShippingAddress.updateMany({ user: userId, isDefault: true }, { $set: { isDefault: false } });
     // Set new default
     const updated = await ShippingAddress.findByIdAndUpdate(addressId, { $set: { isDefault: true } }, { new: true });
-    if (!updated) return res.status(404).json({ message: 'Address not found' });
-    res.status(200).json({ message: 'Default address set', address: updated });
+    if (!updated) return res.status(statusCodes.NOT_FOUND).json({ message: MESSAGES.SHIPPING.ADDRESS_NOT_FOUND });
+    res.status(statusCodes.OK).json({ message: 'Default address set', address: updated });
   } catch (error) {
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ message: `${MESSAGES.GENERAL.INTERNAL_SERVER_ERROR}: ${error.message}` });
   }
 };
 
@@ -295,34 +296,34 @@ export const updateShippingAddress = async (req, res) => {
     // Backend validation
     const errors = {};
     if (!recipientName || typeof recipientName !== 'string' || recipientName.trim().length < 2 || recipientName.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(recipientName.trim())) {
-      errors.recipientName = 'Recipient name is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+      errors.recipientName = MESSAGES.SHIPPING.RECIPIENT_NAME;
     }
     if (!addressLine1 || typeof addressLine1 !== 'string' || addressLine1.trim().length < 5 || addressLine1.trim().length > 100) {
-      errors.addressLine1 = 'Address Line 1 is required and must be 5-100 characters.';
+      errors.addressLine1 = MESSAGES.SHIPPING.ADDRESS_LINE1;
     }
     if (!city || typeof city !== 'string' || city.trim().length < 2 || city.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(city.trim())) {
-      errors.city = 'City is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+      errors.city = MESSAGES.SHIPPING.CITY;
     }
     if (!state || typeof state !== 'string' || state.trim().length < 2 || state.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(state.trim())) {
-      errors.state = 'State is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+      errors.state = MESSAGES.SHIPPING.STATE;
     }
     if (!postalCode || typeof postalCode !== 'string' || postalCode.trim().length < 4 || postalCode.trim().length > 10 || !/^\d{4,10}$/.test(postalCode.trim())) {
-      errors.postalCode = 'Postal code is required and must be 4-10 digits.';
+      errors.postalCode = MESSAGES.SHIPPING.POSTAL_CODE;
     }
     if (!country || typeof country !== 'string' || country.trim().length < 2 || country.trim().length > 50 || !/^[A-Za-z\s.'-]+$/.test(country.trim())) {
-      errors.country = 'Country is required, 2-50 letters, and may only contain letters, spaces, apostrophes, hyphens, and periods.';
+      errors.country = MESSAGES.SHIPPING.COUNTRY;
     }
     if (!phoneNumber || typeof phoneNumber !== 'string' || !/^\d{10,15}$/.test(phoneNumber.trim())) {
-      errors.phoneNumber = 'Phone number is required and must be 10-15 digits.';
+      errors.phoneNumber = MESSAGES.SHIPPING.PHONE;
     }
     if (Object.keys(errors).length > 0) {
-      return res.status(400).json({ message: 'Validation failed', errors });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.SHIPPING.VALIDATION_FAILED, errors });
     }
 
     // Check if address belongs to user
     const existingAddress = await ShippingAddress.findOne({ _id: addressId, user: userId });
     if (!existingAddress) {
-      return res.status(404).json({ message: 'Address not found' });
+      return res.status(statusCodes.NOT_FOUND).json({ message: MESSAGES.SHIPPING.ADDRESS_NOT_FOUND });
     }
 
     // If isDefault is true, unset previous default
@@ -346,9 +347,9 @@ export const updateShippingAddress = async (req, res) => {
       { new: true }
     );
 
-    res.status(200).json({ message: 'Address updated successfully', address: updatedAddress });
+    res.status(statusCodes.OK).json({ message: MESSAGES.SHIPPING.ADDRESS_UPDATED, address: updatedAddress });
   } catch (error) {
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ message: `${MESSAGES.GENERAL.INTERNAL_SERVER_ERROR}: ${error.message}` });
   }
 };
 
@@ -360,18 +361,18 @@ export const deleteShippingAddress = async (req, res) => {
     // Check if address belongs to user
     const address = await ShippingAddress.findOne({ _id: addressId, user: userId });
     if (!address) {
-      return res.status(404).json({ message: 'Address not found' });
+      return res.status(statusCodes.NOT_FOUND).json({ message: MESSAGES.SHIPPING.ADDRESS_NOT_FOUND });
     }
 
     // If this is the default address, don't allow deletion
     if (address.isDefault) {
-      return res.status(400).json({ message: 'Cannot delete default address. Please set another address as default first.' });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.SHIPPING.CANNOT_DELETE_DEFAULT });
     }
 
     await ShippingAddress.findByIdAndDelete(addressId);
-    res.status(200).json({ message: 'Address deleted successfully' });
+    res.status(statusCodes.OK).json({ message: MESSAGES.SHIPPING.ADDRESS_DELETED });
   } catch (error) {
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ message: `${MESSAGES.GENERAL.INTERNAL_SERVER_ERROR}: ${error.message}` });
   }
 };
 
@@ -380,18 +381,18 @@ function generateOtp() {
 }
 
 export const requestEmailChangeOtp = [
-  body("email").isEmail().withMessage("Please provide a valid email address").normalizeEmail(),
+  body("email").isEmail().withMessage(MESSAGES.GENERAL.INVALID_EMAIL).normalizeEmail(),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ message: errors.array().map(e => e.msg).join(", ") });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: errors.array().map(e => e.msg).join(", ") });
     }
     const { email } = req.body;
     const userId = req.user.userId;
     // Check if email is already used by another user
     const existingUser = await User.findOne({ email, _id: { $ne: userId } });
     if (existingUser) {
-      return res.status(400).json({ message: "Email is already registered with another account" });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.EMAIL_TAKEN });
     }
     // Generate and save OTP
     const otp = generateOtp();
@@ -404,37 +405,37 @@ export const requestEmailChangeOtp = [
       subject: "Your Email Change OTP Code",
       text: `Your OTP code is: ${otp}`,
     });
-    res.json({ message: "OTP sent to email" });
+    res.json({ message: MESSAGES.AUTH.OTP_SENT });
   }
 ];
 
 export const verifyEmailChangeOtp = [
-  body("email").isEmail().withMessage("Please provide a valid email address").normalizeEmail(),
-  body("otp").isLength({ min: 6, max: 6 }).withMessage("OTP must be 6 digits"),
+  body("email").isEmail().withMessage(MESSAGES.GENERAL.INVALID_EMAIL).normalizeEmail(),
+  body("otp").isLength({ min: 6, max: 6 }).withMessage(MESSAGES.AUTH.OTP_DIGITS),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ message: errors.array().map(e => e.msg).join(", ") });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: errors.array().map(e => e.msg).join(", ") });
     }
     const { email, otp } = req.body;
     const userId = req.user.userId;
     // Find OTP
     const otpDoc = await Otp.findOne({ email, otp });
     if (!otpDoc) {
-      return res.status(400).json({ message: "Invalid or expired OTP" });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.OTP_INVALID });
     }
     if (Date.now() - new Date(otpDoc.createdAt).getTime() > OTP_EXPIRY_SECONDS * 1000) {
       await Otp.deleteMany({ email });
-      return res.status(400).json({ message: "OTP expired. Please request a new one." });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.OTP_EXPIRED });
     }
     // Update user's email
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ message: MESSAGES.GENERAL.USER_NOT_FOUND });
     }
     user.email = email;
     await user.save();
     await Otp.deleteMany({ email });
-    res.status(200).json({ message: "Email updated successfully", email });
+    res.status(statusCodes.OK).json({ message: "Email updated successfully", email });
   }
 ];

@@ -1,3 +1,4 @@
+import { statusCodes } from "../constants/statusCodes.js";
 import Discount from "../models/discountModel.js";
 import User from "../models/userModel.js";
 import UserDiscountUsage from "../models/userDiscountUsageModel.js";
@@ -58,7 +59,7 @@ export const listDiscounts = async (req, res) => {
   } catch (error) {
     console.error("Error listing discounts:", error);
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -84,35 +85,35 @@ export const addDiscount = async (req, res) => {
 
     // Validation
     if (!name) {
-      return res.status(400).json({ message: "Discount name is required" });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: "Discount name is required" });
     }
 
     if (!discountType || !["percentage", "fixed"].includes(discountType)) {
-      return res.status(400).json({
+      return res.status(statusCodes.BAD_REQUEST).json({
         message: "Discount type must be 'percentage' or 'fixed'",
       });
     }
 
     if (!discountValue || discountValue <= 0) {
-      return res.status(400).json({
+      return res.status(statusCodes.BAD_REQUEST).json({
         message: "Discount value must be greater than 0",
       });
     }
 
     if (discountType === "percentage" && discountValue > 100) {
-      return res.status(400).json({
+      return res.status(statusCodes.BAD_REQUEST).json({
         message: "Percentage discount cannot exceed 100%",
       });
     }
 
     if (!validFrom || !validTo) {
-      return res.status(400).json({
+      return res.status(statusCodes.BAD_REQUEST).json({
         message: "Valid from and valid to dates are required",
       });
     }
 
     if (new Date(validFrom) >= new Date(validTo)) {
-      return res.status(400).json({
+      return res.status(statusCodes.BAD_REQUEST).json({
         message: "Valid to date must be after valid from date",
       });
     }
@@ -122,12 +123,12 @@ export const addDiscount = async (req, res) => {
       const minAmt = minimumAmount ? parseFloat(minimumAmount) : 0;
       const discVal = parseFloat(discountValue);
       if (maxDisc > minAmt) {
-        return res.status(400).json({
+        return res.status(statusCodes.BAD_REQUEST).json({
           message: "Maximum discount cannot be greater than minimum amount."
         });
       }
       if (maxDisc <= discVal) {
-        return res.status(400).json({
+        return res.status(statusCodes.BAD_REQUEST).json({
           message: "Maximum discount must be greater than discount value."
         });
       }
@@ -140,7 +141,7 @@ export const addDiscount = async (req, res) => {
     });
 
     if (existingDiscount) {
-      return res.status(400).json({
+      return res.status(statusCodes.BAD_REQUEST).json({
         message: "Discount with this name already exists",
       });
     }
@@ -151,7 +152,7 @@ export const addDiscount = async (req, res) => {
       isDeleted: false,
     });
     if (existingCode) {
-      return res.status(400).json({
+      return res.status(statusCodes.BAD_REQUEST).json({
         message: "Coupon code already exists. Please use a unique code.",
       });
     }
@@ -178,7 +179,7 @@ export const addDiscount = async (req, res) => {
     const discountWithVirtuals = discount.toObject();
     discountWithVirtuals.isValid = discount.isValid;
 
-    res.status(201).json({
+    res.status(statusCodes.CREATED).json({
       message: "Discount created successfully",
       discount: discountWithVirtuals,
     });
@@ -188,7 +189,7 @@ export const addDiscount = async (req, res) => {
       console.error("[addDiscount] Stack trace:", error.stack);
     }
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -200,7 +201,7 @@ export const getDiscountById = async (req, res) => {
     const discount = await Discount.findOne({ _id: id, isDeleted: false });
 
     if (!discount) {
-      return res.status(404).json({ message: "Discount not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ message: "Discount not found" });
     }
 
     // Return discount with virtual fields
@@ -211,7 +212,7 @@ export const getDiscountById = async (req, res) => {
   } catch (error) {
     console.error("Error getting discount:", error);
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -236,30 +237,30 @@ export const editDiscount = async (req, res) => {
 
     const discount = await Discount.findOne({ _id: id, isDeleted: false });
     if (!discount) {
-      return res.status(404).json({ message: "Discount not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ message: "Discount not found" });
     }
 
     // Validation
     if (discountType && !["percentage", "fixed"].includes(discountType)) {
-      return res.status(400).json({
+      return res.status(statusCodes.BAD_REQUEST).json({
         message: "Discount type must be 'percentage' or 'fixed'",
       });
     }
 
     if (discountValue !== undefined && discountValue <= 0) {
-      return res.status(400).json({
+      return res.status(statusCodes.BAD_REQUEST).json({
         message: "Discount value must be greater than 0",
       });
     }
 
     if (discountType === "percentage" && discountValue > 100) {
-      return res.status(400).json({
+      return res.status(statusCodes.BAD_REQUEST).json({
         message: "Percentage discount cannot exceed 100%",
       });
     }
 
     if (validFrom && validTo && new Date(validFrom) >= new Date(validTo)) {
-      return res.status(400).json({
+      return res.status(statusCodes.BAD_REQUEST).json({
         message: "Valid to date must be after valid from date",
       });
     }
@@ -273,7 +274,7 @@ export const editDiscount = async (req, res) => {
       });
 
       if (existingDiscount) {
-        return res.status(400).json({
+        return res.status(statusCodes.BAD_REQUEST).json({
           message: "Discount with this name already exists",
         });
       }
@@ -286,7 +287,7 @@ export const editDiscount = async (req, res) => {
         isDeleted: false,
       });
       if (existingCode) {
-        return res.status(400).json({
+        return res.status(statusCodes.BAD_REQUEST).json({
           message: "Coupon code already exists. Please use a unique code.",
         });
       }
@@ -327,7 +328,7 @@ export const editDiscount = async (req, res) => {
   } catch (error) {
     console.error("Error editing discount:", error);
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -339,7 +340,7 @@ export const deleteDiscount = async (req, res) => {
     const discount = await Discount.findOne({ _id: id, isDeleted: false });
 
     if (!discount) {
-      return res.status(404).json({ message: "Discount not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ message: "Discount not found" });
     }
 
     discount.isDeleted = true;
@@ -349,7 +350,7 @@ export const deleteDiscount = async (req, res) => {
   } catch (error) {
     console.error("Error deleting discount:", error);
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -361,7 +362,7 @@ export const restoreDiscount = async (req, res) => {
     const discount = await Discount.findOne({ _id: id, isDeleted: true });
 
     if (!discount) {
-      return res.status(404).json({ message: "Deleted discount not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ message: "Deleted discount not found" });
     }
 
     discount.isDeleted = false;
@@ -378,7 +379,7 @@ export const restoreDiscount = async (req, res) => {
   } catch (error) {
     console.error("Error restoring discount:", error);
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -405,7 +406,7 @@ export const getActiveDiscounts = async (req, res) => {
   } catch (error) {
     console.error("Error getting active discounts:", error);
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -464,7 +465,7 @@ export const getUserEligibleDiscounts = async (req, res) => {
   } catch (error) {
     console.error("Error getting user eligible discounts:", error);
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -476,12 +477,12 @@ export const updateDiscountUsage = async (req, res) => {
     const discount = await Discount.findOne({ _id: id, isDeleted: false });
 
     if (!discount) {
-      return res.status(404).json({ message: "Discount not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ message: "Discount not found" });
     }
 
     // Check if discount can still be used
     if (discount.maxUsage && discount.usageCount >= discount.maxUsage) {
-      return res.status(400).json({ message: "Discount usage limit reached" });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: "Discount usage limit reached" });
     }
 
     discount.usageCount += 1;
@@ -494,7 +495,7 @@ export const updateDiscountUsage = async (req, res) => {
   } catch (error) {
     console.error("Error updating discount usage:", error);
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -510,7 +511,7 @@ export const getUserDiscountUsage = async (req, res) => {
     // Verify discount exists
     const discount = await Discount.findById(discountId);
     if (!discount) {
-      return res.status(404).json({ message: "Discount not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ message: "Discount not found" });
     }
 
     const query = { discount: discountId };
@@ -553,7 +554,7 @@ export const getUserDiscountUsage = async (req, res) => {
   } catch (error) {
     console.error("Error getting user discount usage:", error);
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -634,7 +635,7 @@ export const getAllDiscountUsageStats = async (req, res) => {
   } catch (error) {
     console.error("Error getting all discount usage stats:", error);
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -645,7 +646,7 @@ export const validateCouponCode = async (req, res) => {
     const { code, orderAmount } = req.body;
     const userId = req.user.userId;
     if (!code) {
-      return res.status(400).json({ message: "Coupon code is required" });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: "Coupon code is required" });
     }
     const now = new Date();
     
@@ -694,29 +695,29 @@ export const validateCouponCode = async (req, res) => {
     }
     
     if (!discount) {
-      return res.status(404).json({ message: "Invalid or expired coupon code" });
+      return res.status(statusCodes.NOT_FOUND).json({ message: "Invalid or expired coupon code" });
     }
     
     // Check minimum order amount
     if (discount.minimumAmount > 0 && orderAmount < discount.minimumAmount) {
-      return res.status(400).json({ message: `Minimum order amount of ₹${discount.minimumAmount} required for this coupon` });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: `Minimum order amount of ₹${discount.minimumAmount} required for this coupon` });
     }
     
     // Check global usage limit
     if (discount.maxUsage && discount.usageCount >= discount.maxUsage) {
-      return res.status(400).json({ message: "Coupon usage limit reached" });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: "Coupon usage limit reached" });
     }
     
     // Check per-user usage limit
     const userUsage = await UserDiscountUsage.findOne({ user: userId, discount: discount._id });
     if (discount.maxUsagePerUser && userUsage && userUsage.usageCount >= discount.maxUsagePerUser) {
-      return res.status(400).json({ message: "You have reached your personal usage limit for this coupon" });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: "You have reached your personal usage limit for this coupon" });
     }
     
     // All checks passed, return discount details
     res.json({ discount });
   } catch (error) {
     console.error("Error validating coupon code:", error);
-    res.status(500).json({ message: `Internal Server Error: ${error.message}` });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ message: `Internal Server Error: ${error.message}` });
   }
 };

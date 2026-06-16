@@ -1,3 +1,4 @@
+import { statusCodes } from "../constants/statusCodes.js";
 import jwt from "jsonwebtoken";
 import User from "../models/userModel.js";
 import {
@@ -24,32 +25,32 @@ export const verifyToken = async function (req, res, next) {
   }
 
   if (!accessToken) {
-    return res.status(401).json({ message: `No token, authorization denied` });
+    return res.status(statusCodes.UNAUTHORIZED).json({ message: `No token, authorization denied` });
   }
 
   try {
     // Verify the access token
     const decoded = verifyAccessToken(accessToken);
     if (!decoded) {
-      return res.status(401).json({ message: "Invalid or expired token" });
+      return res.status(statusCodes.UNAUTHORIZED).json({ message: "Invalid or expired token" });
     }
 
     const userId = decoded.userId;
     if (!userId) {
       return res
-        .status(401)
+        .status(statusCodes.UNAUTHORIZED)
         .json({ message: `Invalid token, authorization denied` });
     }
 
     // Find the user
     const user = await User.findOne({ _id: userId });
     if (!user) {
-      return res.status(401).json({ message: "User not found" });
+      return res.status(statusCodes.UNAUTHORIZED).json({ message: "User not found" });
     }
 
     // Check if user is deleted
     if (user.isDeleted) {
-      return res.status(401).json({ message: "User account has been deleted" });
+      return res.status(statusCodes.UNAUTHORIZED).json({ message: "User account has been deleted" });
     }
 
     // Attach user info to request
@@ -57,7 +58,7 @@ export const verifyToken = async function (req, res, next) {
     next();
   } catch (error) {
     console.error(`Token verification error:`, error.message);
-    return res.status(401).json({ message: "Token verification failed" });
+    return res.status(statusCodes.UNAUTHORIZED).json({ message: "Token verification failed" });
   }
 };
 
@@ -70,7 +71,7 @@ export const isAdmin = function (req, res, next) {
   if (req.user.role !== "admin") {
     console.log("Access denied - not admin");
     return res
-      .status(403)
+      .status(statusCodes.FORBIDDEN)
       .json({ message: `Access denied. You do not have admin privileges.` });
   }
   console.log("Admin access granted");
