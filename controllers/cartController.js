@@ -1,3 +1,4 @@
+import { statusCodes } from "../constants/statusCodes.js";
 import Cart from "../models/cartModel.js";
 import ProductVariant from "../models/productVariantModel.js";
 import Product from "../models/productModel.js";
@@ -12,7 +13,7 @@ export const addToCart = async (req, res) => {
 
     // Validate input
     if (!productVariantId || quantity < 1 || quantity > 5) {
-      return res.status(400).json({ 
+      return res.status(statusCodes.BAD_REQUEST).json({ 
         error: "Invalid input. Product variant ID is required and quantity must be between 1 and 5." 
       });
     }
@@ -23,35 +24,35 @@ export const addToCart = async (req, res) => {
       .lean();
 
     if (!variant) {
-      return res.status(404).json({ error: "Product variant not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ error: "Product variant not found" });
     }
 
     // Check if product exists
     if (!variant.product) {
-      return res.status(404).json({ error: "Product not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ error: "Product not found" });
     }
 
     // Check if product is active and not blocked
     if (variant.product.status !== "active" || variant.product.blocked || variant.product.unavailable) {
-      return res.status(400).json({ error: "Product is not available for purchase" });
+      return res.status(statusCodes.BAD_REQUEST).json({ error: "Product is not available for purchase" });
     }
 
     // Check if category is active
     if (variant.product.category) {
       const category = await Category.findById(variant.product.category).lean();
       if (category && (category.status !== "active" || category.blocked)) {
-        return res.status(400).json({ error: "Product category is not available" });
+        return res.status(statusCodes.BAD_REQUEST).json({ error: "Product category is not available" });
       }
     }
 
     // Check if variant is active
     if (variant.status !== "active") {
-      return res.status(400).json({ error: "Product variant is not available" });
+      return res.status(statusCodes.BAD_REQUEST).json({ error: "Product variant is not available" });
     }
 
     // Check stock availability
     if (variant.stock < quantity) {
-      return res.status(400).json({ 
+      return res.status(statusCodes.BAD_REQUEST).json({ 
         error: `Insufficient stock. Only ${variant.stock} items available.` 
       });
     }
@@ -73,14 +74,14 @@ export const addToCart = async (req, res) => {
       
       // Check if new quantity exceeds stock
       if (newQuantity > variant.stock) {
-        return res.status(400).json({ 
+        return res.status(statusCodes.BAD_REQUEST).json({ 
           error: `Cannot add more items. Maximum available: ${variant.stock}` 
         });
       }
 
       // Check if new quantity exceeds max limit (5)
       if (newQuantity > 5) {
-        return res.status(400).json({ 
+        return res.status(statusCodes.BAD_REQUEST).json({ 
           error: "Maximum quantity limit is 5 items per variant" 
         });
       }
@@ -119,14 +120,14 @@ export const addToCart = async (req, res) => {
         }
       });
 
-    res.status(200).json({
+    res.status(statusCodes.OK).json({
       message: "Item added to cart successfully",
       cart: populatedCart
     });
 
   } catch (error) {
     console.error("Add to cart error:", error);
-    res.status(500).json({ error: "Failed to add item to cart" });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ error: "Failed to add item to cart" });
   }
 };
 
@@ -150,7 +151,7 @@ export const getCart = async (req, res) => {
     res.json(cart);
   } catch (error) {
     console.error("Get cart error:", error);
-    res.status(500).json({ error: "Failed to fetch cart" });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ error: "Failed to fetch cart" });
   }
 };
 
@@ -161,14 +162,14 @@ export const updateCartItem = async (req, res) => {
     const { productVariantId, quantity } = req.body;
 
     if (!productVariantId || quantity < 0 || quantity > 5) {
-      return res.status(400).json({ 
+      return res.status(statusCodes.BAD_REQUEST).json({ 
         error: "Invalid input. Quantity must be between 0 and 5." 
       });
     }
 
     const cart = await Cart.findOne({ userId });
     if (!cart) {
-      return res.status(404).json({ error: "Cart not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ error: "Cart not found" });
     }
 
     if (quantity === 0) {
@@ -183,13 +184,13 @@ export const updateCartItem = async (req, res) => {
       );
 
       if (itemIndex === -1) {
-        return res.status(404).json({ error: "Item not found in cart" });
+        return res.status(statusCodes.NOT_FOUND).json({ error: "Item not found in cart" });
       }
 
       // Check stock availability
       const variant = await ProductVariant.findById(productVariantId);
       if (!variant || variant.stock < quantity) {
-        return res.status(400).json({ 
+        return res.status(statusCodes.BAD_REQUEST).json({ 
           error: `Insufficient stock. Only ${variant?.stock || 0} items available.` 
         });
       }
@@ -215,7 +216,7 @@ export const updateCartItem = async (req, res) => {
 
   } catch (error) {
     console.error("Update cart error:", error);
-    res.status(500).json({ error: "Failed to update cart" });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ error: "Failed to update cart" });
   }
 };
 
@@ -226,12 +227,12 @@ export const removeFromCart = async (req, res) => {
     const { productVariantId } = req.body;
 
     if (!productVariantId) {
-      return res.status(400).json({ error: "Product variant ID is required" });
+      return res.status(statusCodes.BAD_REQUEST).json({ error: "Product variant ID is required" });
     }
 
     const cart = await Cart.findOne({ userId });
     if (!cart) {
-      return res.status(404).json({ error: "Cart not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ error: "Cart not found" });
     }
 
     cart.items = cart.items.filter(
@@ -247,7 +248,7 @@ export const removeFromCart = async (req, res) => {
 
   } catch (error) {
     console.error("Remove from cart error:", error);
-    res.status(500).json({ error: "Failed to remove item from cart" });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ error: "Failed to remove item from cart" });
   }
 };
 
@@ -267,7 +268,7 @@ export const clearCart = async (req, res) => {
 
     if (!cart) {
       // console.log("No cart found for user:", userId);
-      return res.status(404).json({ error: "Cart not found" });
+      return res.status(statusCodes.NOT_FOUND).json({ error: "Cart not found" });
     }
 
     res.json({
@@ -276,7 +277,7 @@ export const clearCart = async (req, res) => {
     });
   } catch (error) {
     console.error("Clear cart error:", error);
-    res.status(500).json({ error: "Failed to clear cart" });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ error: "Failed to clear cart" });
   }
 };
 
@@ -287,7 +288,7 @@ export const getAvailableStock = async (req, res) => {
     const { productId } = req.params;
 
     if (!productId) {
-      return res.status(400).json({ error: "Product ID is required" });
+      return res.status(statusCodes.BAD_REQUEST).json({ error: "Product ID is required" });
     }
 
     // Get user's cart
@@ -333,6 +334,6 @@ export const getAvailableStock = async (req, res) => {
 
   } catch (error) {
     console.error("Get available stock error:", error);
-    res.status(500).json({ error: "Failed to get available stock" });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ error: "Failed to get available stock" });
   }
 }; 

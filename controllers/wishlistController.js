@@ -1,3 +1,4 @@
+import { statusCodes } from "../constants/statusCodes.js";
 import WishlistItem from "../models/wishlistModel.js";
 import ProductVariant from "../models/productVariantModel.js";
 
@@ -42,7 +43,7 @@ export const getWishlist = async (req, res) => {
 
     res.json(itemsWithImage);
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch wishlist" });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ error: "Failed to fetch wishlist" });
   }
 };
 
@@ -57,12 +58,12 @@ export const addToWishlist = async (req, res) => {
       product,
       variant,
     });
-    if (exists) return res.status(200).json(exists);
+    if (exists) return res.status(statusCodes.OK).json(exists);
     const item = await WishlistItem.create({ user: userId, product, variant });
-    res.status(201).json(item);
+    res.status(statusCodes.CREATED).json(item);
   } catch (err) {
     console.error("Wishlist add error:", err);
-    res.status(500).json({ error: "Failed to add to wishlist" });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ error: "Failed to add to wishlist" });
   }
 };
 
@@ -74,6 +75,6 @@ export const removeFromWishlist = async (req, res) => {
     await WishlistItem.deleteOne({ user: userId, product, variant });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: "Failed to remove from wishlist" });
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({ error: "Failed to remove from wishlist" });
   }
 };

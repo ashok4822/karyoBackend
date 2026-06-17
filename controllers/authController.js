@@ -1,4 +1,6 @@
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt.js";
+import { MESSAGES } from "../constants/messages.js";
+import { statusCodes } from "../constants/statusCodes.js";
 import { validationResult } from "express-validator";
 import User from "../models/userModel.js";
 import Otp from "../models/otpModel.js";
@@ -27,7 +29,7 @@ export const registerUser = async function (req, res) {
   const errors = validationResult(req);
 
   if (!errors.isEmpty()) {
-    return res.status(400).json({
+    return res.status(statusCodes.BAD_REQUEST).json({
       message: errors
         .array()
         .map((error) => error.msg)
@@ -39,13 +41,13 @@ export const registerUser = async function (req, res) {
     const isUserExist = await User.findOne({ email });
 
     if (isUserExist) {
-      return res.status(400).json({ message: `User already exists` });
+      return res.status(400).json({ message: MESSAGES.AUTH.USER_EXISTS });
     }
 
     const isUserNameExist = await User.findOne({ username });
 
     if (isUserNameExist) {
-      return res.status(400).json({ message: `Username already exists` });
+      return res.status(400).json({ message: MESSAGES.AUTH.USERNAME_EXISTS });
     }
 
     // Validate referral if provided
@@ -64,7 +66,7 @@ export const registerUser = async function (req, res) {
           if (!referrerUser) {
             return res
               .status(400)
-              .json({ message: "Invalid or expired referral code/token" });
+              .json({ message: MESSAGES.AUTH.INVALID_REFERRAL });
           }
           usedReferralCode = referralCode;
         }
@@ -72,7 +74,7 @@ export const registerUser = async function (req, res) {
       if (!referral && !referrerUser) {
         return res
           .status(400)
-          .json({ message: "Invalid or expired referral code/token" });
+          .json({ message: MESSAGES.AUTH.INVALID_REFERRAL });
       }
     }
 
@@ -183,26 +185,25 @@ export const loginUser = async function (req, res) {
     const user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(400).json({ message: `User not found` });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.GENERAL.USER_NOT_FOUND });
     }
 
     if (user.isDeleted) {
-      return res.status(403).json({
-        message:
-          "Your account has been blocked by the admin. Please contact support.",
+      return res.status(statusCodes.FORBIDDEN).json({
+        message: MESSAGES.AUTH.ACCOUNT_BLOCKED,
       });
     }
 
     if (user.role === "admin") {
       return res
-        .status(403)
-        .json({ message: "Admins must log in through the admin login page." });
+        .status(statusCodes.FORBIDDEN)
+        .json({ message: MESSAGES.AUTH.ADMIN_LOGIN_REQUIRED });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      return res.status(400).json({ message: `Invalid Credentials` });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.INVALID_CREDENTIALS });
     }
 
     const accessToken = generateAccessToken(user);
@@ -219,56 +220,63 @@ export const loginUser = async function (req, res) {
       path: "/",
     });
 
-    res.status(200).json({
+    res.status(statusCodes.OK).json({
       user: { id: user.id, role: user.role, username: user.username },
       token: accessToken,
     });
   } catch (error) {
     res
-      .status(500)
-      .json({ message: `Internal Server Error: ${error.message}` });
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
+      .json({ message: `${MESSAGES.GENERAL.INTERNAL_SERVER_ERROR}: ${error.message}` });
   }
 };
 
 export const requestOtp = async (req, res) => {
   const { email, username } = req.body;
-  if (!email) return res.status(400).json({ message: "Email is required" });
+  if (!email) return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.EMAIL_REQUIRED });
   if (!username)
-    return res.status(400).json({ message: "Username is required" });
+    return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.VALIDATION.USERNAME_REQUIRED });
   const userByEmail = await User.findOne({ email });
   if (userByEmail)
-    return res.status(400).json({ message: "User already exists" });
+    return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.USER_EXISTS });
   const userByUsername = await User.findOne({ username });
   if (userByUsername)
-    return res.status(400).json({ message: "Username already exists" });
+    return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.USERNAME_EXISTS });
   const otp = generateOtp();
   await Otp.deleteMany({ email });
   await Otp.create({ email, otp });
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: "Your Signup OTP Code",
-    text: `Your OTP code is: ${otp}`,
-  });
-  res.json({ message: "OTP sent to email" });
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Your Signup OTP Code",
+      text: `Your OTP code is: ${otp}`,
+    });
+  } catch (mailError) {
+    console.error("Failed to send signup OTP email:", mailError.message);
+    return res
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
+      .json({ message: "Failed to send OTP email. Please try again later." });
+  }
+  res.json({ message: MESSAGES.AUTH.OTP_SENT });
 };
 
 export const verifyOtp = async (req, res) => {
   const { email, otp, username, password, referralCode, referralToken } =
     req.body;
   if (!email || !otp || !username || !password)
-    return res.status(400).json({ message: "All fields required" });
+    return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.ALL_FIELDS_REQUIRED });
   const otpDoc = await Otp.findOne({ email, otp });
   if (!otpDoc)
-    return res.status(400).json({ message: "Invalid or expired OTP" });
+    return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.OTP_INVALID });
   if (
     Date.now() - new Date(otpDoc.createdAt).getTime() >
     OTP_EXPIRY_SECONDS * 1000
   ) {
     await Otp.deleteMany({ email });
     return res
-      .status(400)
-      .json({ message: "OTP expired. Please request a new one." });
+      .status(statusCodes.BAD_REQUEST)
+      .json({ message: MESSAGES.AUTH.OTP_EXPIRED });
   }
   const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -285,16 +293,16 @@ export const verifyOtp = async (req, res) => {
         referrerUser = await User.findOne({ referralCode: referralCode });
         if (!referrerUser) {
           return res
-            .status(400)
-            .json({ message: "Invalid or expired referral code/token" });
+            .status(statusCodes.BAD_REQUEST)
+            .json({ message: MESSAGES.AUTH.INVALID_REFERRAL });
         }
         usedReferralCode = referralCode;
       }
     }
     if (!referral && !referrerUser) {
       return res
-        .status(400)
-        .json({ message: "Invalid or expired referral code/token" });
+        .status(statusCodes.BAD_REQUEST)
+        .json({ message: MESSAGES.AUTH.INVALID_REFERRAL });
     }
   }
 
@@ -372,24 +380,31 @@ export const verifyOtp = async (req, res) => {
     path: "/",
   });
   res
-    .status(200)
+    .status(statusCodes.OK)
     .json({ user: { id: user.id, role: user.role }, token: accessToken });
 };
 
 export const requestPasswordResetOtp = async (req, res) => {
   const { email } = req.body;
-  if (!email) return res.status(400).json({ message: "Email is required" });
+  if (!email) return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.EMAIL_REQUIRED });
   const user = await User.findOne({ email });
-  if (!user) return res.status(400).json({ message: "User not found" });
+  if (!user) return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.GENERAL.USER_NOT_FOUND });
   const otp = generateOtp();
   await Otp.deleteMany({ email });
   const otpDoc = await Otp.create({ email, otp });
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: "Your Password Reset OTP Code",
-    text: `Your OTP code is: ${otp}`,
-  });
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Your Password Reset OTP Code",
+      text: `Your OTP code is: ${otp}`,
+    });
+  } catch (mailError) {
+    console.error("Failed to send password reset OTP email:", mailError.message);
+    return res
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
+      .json({ message: "Failed to send OTP email. Please try again later." });
+  }
   res.json({
     message: "OTP sent to email",
     expiresAt: new Date(otpDoc.createdAt).getTime() + OTP_EXPIRY_SECONDS * 1000, // ms timestamp
@@ -399,47 +414,47 @@ export const requestPasswordResetOtp = async (req, res) => {
 export const verifyPasswordResetOtp = async (req, res) => {
   const { email, otp } = req.body;
   if (!email || !otp)
-    return res.status(400).json({ message: "All fields required" });
+    return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.ALL_FIELDS_REQUIRED });
   const otpDoc = await Otp.findOne({ email, otp });
   if (!otpDoc)
-    return res.status(400).json({ message: "Invalid or expired OTP" });
+    return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.OTP_INVALID });
   if (
     Date.now() - new Date(otpDoc.createdAt).getTime() >
     OTP_EXPIRY_SECONDS * 1000
   ) {
     await Otp.deleteMany({ email });
     return res
-      .status(400)
-      .json({ message: "OTP expired. Please request a new one." });
+      .status(statusCodes.BAD_REQUEST)
+      .json({ message: MESSAGES.AUTH.OTP_EXPIRED });
   }
   // Generate a password reset token (JWT)
   const resetToken = jwt.sign({ email }, PASSWORD_RESET_TOKEN_SECRET, {
     expiresIn: PASSWORD_RESET_TOKEN_EXPIRY,
   });
   await Otp.deleteMany({ email }); // Invalidate OTP after successful verification
-  res.status(200).json({ message: "OTP verified", resetToken });
+  res.status(statusCodes.OK).json({ message: MESSAGES.AUTH.OTP_VERIFIED, resetToken });
 };
 
 export const resetPassword = async (req, res) => {
   const { email, newPassword, resetToken } = req.body;
   if (!email || !newPassword || !resetToken)
-    return res.status(400).json({ message: "All fields required" });
+    return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.ALL_FIELDS_REQUIRED });
   // Verify the reset token
   try {
     const payload = jwt.verify(resetToken, PASSWORD_RESET_TOKEN_SECRET);
     if (payload.email !== email) {
-      return res.status(400).json({ message: "Invalid reset token" });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.AUTH.RESET_TOKEN_INVALID });
     }
   } catch (err) {
-    return res.status(400).json({
-      message: "Reset token expired or invalid. Please request a new OTP.",
+    return res.status(statusCodes.BAD_REQUEST).json({
+      message: MESSAGES.AUTH.RESET_TOKEN_EXPIRED,
     });
   }
   const user = await User.findOne({ email });
-  if (!user) return res.status(400).json({ message: "User not found" });
+  if (!user) return res.status(statusCodes.BAD_REQUEST).json({ message: MESSAGES.GENERAL.USER_NOT_FOUND });
   user.password = await bcrypt.hash(newPassword, 10);
   await user.save();
-  res.status(200).json({ message: "Password reset successful" });
+  res.status(statusCodes.OK).json({ message: MESSAGES.AUTH.RESET_SUCCESS });
 };
 
 export const refreshToken = async (req, res) => {
@@ -449,7 +464,7 @@ export const refreshToken = async (req, res) => {
 
     if (!token) {
       console.log("[refreshToken] No refresh token cookie found");
-      return res.status(401).json({ message: "No refresh token" });
+      return res.status(statusCodes.UNAUTHORIZED).json({ message: "No refresh token" });
     }
 
     let payload;
@@ -461,13 +476,13 @@ export const refreshToken = async (req, res) => {
       );
     } catch (err) {
       console.log("[refreshToken] JWT verification failed:", err.message);
-      return res.status(401).json({ message: "Invalid refresh token" });
+      return res.status(statusCodes.UNAUTHORIZED).json({ message: "Invalid refresh token" });
     }
 
     const user = await User.findById(payload.userId);
     if (!user) {
       console.log("[refreshToken] No user found for userId:", payload.userId);
-      return res.status(401).json({ message: "Invalid refresh token" });
+      return res.status(statusCodes.UNAUTHORIZED).json({ message: "Invalid refresh token" });
     }
 
     if (user.refreshToken !== token) {
@@ -477,7 +492,7 @@ export const refreshToken = async (req, res) => {
         "Cookie token:",
         token ? "exists" : "missing"
       );
-      return res.status(401).json({ message: "Invalid refresh token" });
+      return res.status(statusCodes.UNAUTHORIZED).json({ message: "Invalid refresh token" });
     }
 
     const newAccessToken = generateAccessToken(user);
@@ -486,7 +501,7 @@ export const refreshToken = async (req, res) => {
   } catch (error) {
     console.log("[refreshToken] Internal server error:", error.message);
     res
-      .status(500)
-      .json({ message: `Internal Server Error: ${error.message}` });
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
+      .json({ message: `${MESSAGES.GENERAL.INTERNAL_SERVER_ERROR}: ${error.message}` });
   }
 };

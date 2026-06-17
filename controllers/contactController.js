@@ -1,3 +1,5 @@
+import { statusCodes } from "../constants/statusCodes.js";
+import { MESSAGES } from "../constants/messages.js";
 import { sendMail } from "../config/mail.js";
 
 export const submitContactForm = async (req, res) => {
@@ -6,18 +8,18 @@ export const submitContactForm = async (req, res) => {
 
     // Validate required fields
     if (!name || !email || !subject || !message) {
-      return res.status(400).json({
+      return res.status(statusCodes.BAD_REQUEST).json({
         success: false,
-        message: "All fields are required",
+        message: MESSAGES.GENERAL.ALL_FIELDS_REQUIRED,
       });
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return res.status(400).json({
+      return res.status(statusCodes.BAD_REQUEST).json({
         success: false,
-        message: "Please provide a valid email address",
+        message: MESSAGES.GENERAL.INVALID_EMAIL,
       });
     }
 
@@ -57,15 +59,15 @@ export const submitContactForm = async (req, res) => {
       html: userEmailContent,
     });
 
-    res.status(200).json({
+    res.status(statusCodes.OK).json({
       success: true,
-      message: "Thank you for your message! We'll get back to you soon.",
+      message: MESSAGES.GENERAL.SUCCESS_SEND,
     });
   } catch (error) {
     console.error("Contact form submission error:", error);
-    res.status(500).json({
+    res.status(statusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: "Failed to send message. Please try again later.",
+      message: MESSAGES.GENERAL.FAILED_TO_SEND,
     });
   }
 };

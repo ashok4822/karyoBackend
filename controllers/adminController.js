@@ -1,3 +1,4 @@
+import { statusCodes } from "../constants/statusCodes.js";
 import User from "../models/userModel.js";
 import bcrypt from "bcryptjs";
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt.js";
@@ -10,19 +11,19 @@ export const adminLogin = async function (req, res) {
     // 1. Validate fields
     if (!email || !password) {
       return res
-        .status(400)
+        .status(statusCodes.BAD_REQUEST)
         .json({ message: "Email and password are required" });
     }
 
     const user = await User.findOne({ email, role: "admin" });
     if (!user) {
       return res
-        .status(400)
+        .status(statusCodes.BAD_REQUEST)
         .json({ message: "Admin not found or not authorized" });
     }
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(statusCodes.BAD_REQUEST).json({ message: "Invalid credentials" });
     }
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
@@ -37,11 +38,11 @@ export const adminLogin = async function (req, res) {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     res
-      .status(200)
+      .status(statusCodes.OK)
       .json({ user: { id: user.id, role: user.role }, token: accessToken });
   } catch (error) {
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -74,7 +75,7 @@ export const getUsersPaginated = async function (req, res) {
     });
   } catch (error) {
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -83,11 +84,11 @@ export const blockUnblockUser = async function (req, res) {
   try {
     const userId = req.params.id;
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) return res.status(statusCodes.NOT_FOUND).json({ message: "User not found" });
     
     // Prevent blocking admin users
     if (user.role === "admin") {
-      return res.status(403).json({ message: "Cannot block admin users" });
+      return res.status(statusCodes.FORBIDDEN).json({ message: "Cannot block admin users" });
     }
     
     user.isDeleted = !user.isDeleted;
@@ -98,7 +99,7 @@ export const blockUnblockUser = async function (req, res) {
     });
   } catch (error) {
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };
@@ -106,22 +107,22 @@ export const blockUnblockUser = async function (req, res) {
 export const adminRefreshToken = async (req, res) => {
   try {
     const token = req.cookies["adminRefreshToken"];
-    if (!token) return res.status(401).json({ message: "No refresh token" });
+    if (!token) return res.status(statusCodes.UNAUTHORIZED).json({ message: "No refresh token" });
     let payload;
     try {
       payload = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET);
     } catch (err) {
-      return res.status(401).json({ message: "Invalid refresh token" });
+      return res.status(statusCodes.UNAUTHORIZED).json({ message: "Invalid refresh token" });
     }
     const user = await User.findById(payload.userId);
     if (!user || user.refreshToken !== token || user.role !== "admin") {
-      return res.status(401).json({ message: "Invalid refresh token" });
+      return res.status(statusCodes.UNAUTHORIZED).json({ message: "Invalid refresh token" });
     }
     const newAccessToken = generateAccessToken(user);
     res.json({ token: newAccessToken });
   } catch (error) {
     res
-      .status(500)
+      .status(statusCodes.INTERNAL_SERVER_ERROR)
       .json({ message: `Internal Server Error: ${error.message}` });
   }
 };

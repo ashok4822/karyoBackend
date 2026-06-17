@@ -1,3 +1,4 @@
+import { MESSAGES } from "../constants/messages.js";
 import Product from "../models/productModel.js";
 import ProductVariant from "../models/productVariantModel.js";
 import cloudinary, { uploadFromBuffer } from "../config/cloudinary.js";
@@ -38,7 +39,7 @@ export const addProduct = async (req, res) => {
 
     if (missingFields.length > 0) {
       return res.status(400).json({
-        message: "Missing required fields",
+        message: MESSAGES.PRODUCT.MISSING_FIELDS,
         missingFields,
         received: { name, category, brand },
       });
@@ -46,7 +47,7 @@ export const addProduct = async (req, res) => {
 
     // Validate category ID format
     if (!mongoose.Types.ObjectId.isValid(category)) {
-      return res.status(400).json({ message: "Invalid category ID format" });
+      return res.status(400).json({ message: MESSAGES.PRODUCT.INVALID_CATEGORY_ID });
     }
 
     // Check if variants are provided
@@ -61,7 +62,7 @@ export const addProduct = async (req, res) => {
         console.log("Parsed variants:", variantList);
 
         if (!Array.isArray(variantList)) {
-          return res.status(400).json({ message: "Variants must be an array" });
+          return res.status(400).json({ message: MESSAGES.PRODUCT.VARIANTS_ARRAY });
         }
 
         // Validate each variant
@@ -103,7 +104,7 @@ export const addProduct = async (req, res) => {
 
         if (variantImageFields.length === 0) {
           return res.status(400).json({
-            message: "Variant images are required when variants are enabled",
+            message: MESSAGES.PRODUCT.VARIANT_IMAGES_REQUIRED,
           });
         }
 
@@ -121,7 +122,7 @@ export const addProduct = async (req, res) => {
       } catch (parseError) {
         console.error("Error parsing variants:", parseError);
         return res.status(400).json({
-          message: "Invalid variants format",
+          message: MESSAGES.PRODUCT.INVALID_VARIANTS_FORMAT,
           error: parseError.message,
           received: variants,
         });
@@ -131,7 +132,7 @@ export const addProduct = async (req, res) => {
       const productImages = req.files?.images || [];
       if (productImages.length < 3) {
         return res.status(400).json({
-          message: "At least 3 images required for product",
+          message: MESSAGES.PRODUCT.PRODUCT_IMAGES_REQUIRED,
           imagesReceived: productImages.length,
         });
       }
@@ -142,7 +143,7 @@ export const addProduct = async (req, res) => {
       );
       if (nonImageFiles.length > 0) {
         return res.status(400).json({
-          message: "All files must be images",
+          message: MESSAGES.PRODUCT.ALL_FILES_MUST_BE_IMAGES,
           nonImageFiles: nonImageFiles.map((f) => f.originalname),
         });
       }
@@ -309,7 +310,7 @@ export const addProduct = async (req, res) => {
     }
 
     console.log("Product created successfully");
-    res.status(201).json({ message: "Product created", product });
+    res.status(201).json({ message: MESSAGES.PRODUCT.CREATED, product });
   } catch (error) {
     console.error("Product creation error:", error);
 
@@ -319,17 +320,17 @@ export const addProduct = async (req, res) => {
         (err) => err.message
       );
       return res.status(400).json({
-        message: "Validation error",
+        message: MESSAGES.PRODUCT.VALIDATION_ERROR,
         errors: validationErrors,
       });
     }
 
     if (error.name === "CastError") {
-      return res.status(400).json({ message: "Invalid data format" });
+      return res.status(400).json({ message: MESSAGES.PRODUCT.INVALID_DATA });
     }
 
     res.status(500).json({
-      message: "Internal Server Error",
+      message: MESSAGES.GENERAL.INTERNAL_SERVER_ERROR,
       error:
         process.env.NODE_ENV === "development"
           ? error.message
@@ -358,7 +359,7 @@ export const listProducts = async (req, res) => {
     // Validate search input
     let searchTrimmed = typeof search === "string" ? search.trim() : "";
     if (searchTrimmed && !/^[\w\s.,'"!?-]{0,100}$/.test(searchTrimmed)) {
-      return res.status(400).json({ message: "Invalid search input." });
+      return res.status(400).json({ message: MESSAGES.PRODUCT.INVALID_SEARCH });
     }
 
     console.log("Filter parameters:", {
@@ -745,7 +746,7 @@ export const getProductById = async (req, res) => {
         select: "colour capacity price stock imageUrls",
       });
     if (!product || product.isDeleted)
-      return res.status(404).json({ message: "Product not found" });
+      return res.status(404).json({ message: MESSAGES.PRODUCT.NOT_FOUND });
     res.json(product);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -764,7 +765,7 @@ export const editProduct = async (req, res) => {
     const { name, description, category, brand, status, variants } = req.body;
     const product = await Product.findById(req.params.id);
     if (!product || product.isDeleted)
-      return res.status(404).json({ message: "Product not found" });
+      return res.status(404).json({ message: MESSAGES.PRODUCT.NOT_FOUND });
 
     // Store the previous status to check if it changed
     const previousStatus = product.status;
@@ -935,7 +936,7 @@ export const editProduct = async (req, res) => {
     }
 
     console.log("Product updated successfully");
-    res.json({ message: "Product updated", product });
+    res.json({ message: MESSAGES.PRODUCT.UPDATED, product });
   } catch (error) {
     console.error("Product update error:", error);
     res.status(500).json({ message: error.message });
@@ -947,10 +948,10 @@ export const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
     if (!product || product.isDeleted)
-      return res.status(404).json({ message: "Product not found" });
+      return res.status(404).json({ message: MESSAGES.PRODUCT.NOT_FOUND });
     product.isDeleted = true;
     await product.save();
-    res.json({ message: "Product deleted" });
+    res.json({ message: MESSAGES.PRODUCT.DELETED });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -995,7 +996,7 @@ export const deleteVariant = async (req, res) => {
     // Check if product exists
     const product = await Product.findById(productId);
     if (!product || product.isDeleted) {
-      return res.status(404).json({ message: "Product not found" });
+      return res.status(404).json({ message: MESSAGES.PRODUCT.NOT_FOUND });
     }
 
     // Check if variant exists and belongs to the product
@@ -1005,7 +1006,7 @@ export const deleteVariant = async (req, res) => {
       isDeleted: false,
     });
     if (!variant) {
-      return res.status(404).json({ message: "Variant not found" });
+      return res.status(404).json({ message: MESSAGES.PRODUCT.VARIANT_NOT_FOUND });
     }
 
     // Check if this is the last variant for the product (count only non-deleted)
@@ -1015,8 +1016,7 @@ export const deleteVariant = async (req, res) => {
     });
     if (variantCount <= 1) {
       return res.status(400).json({
-        message:
-          "A product must have at least one variant. Cannot delete the last variant.",
+        message: MESSAGES.PRODUCT.LAST_VARIANT_DELETE,
       });
     }
 
@@ -1050,7 +1050,7 @@ export const deleteVariant = async (req, res) => {
 
     await product.save();
 
-    res.json({ message: "Variant deleted successfully (soft delete)" });
+    res.json({ message: MESSAGES.PRODUCT.VARIANT_DELETED });
   } catch (error) {
     console.error("Delete variant error:", error);
     res.status(500).json({ message: error.message });
@@ -1069,7 +1069,7 @@ export const updateVariant = async (req, res) => {
     // Check if product exists
     const product = await Product.findById(productId);
     if (!product || product.isDeleted) {
-      return res.status(404).json({ message: "Product not found" });
+      return res.status(404).json({ message: MESSAGES.PRODUCT.NOT_FOUND });
     }
 
     // Check if variant exists and belongs to the product
@@ -1078,7 +1078,7 @@ export const updateVariant = async (req, res) => {
       product: productId,
     });
     if (!variant) {
-      return res.status(404).json({ message: "Variant not found" });
+      return res.status(404).json({ message: MESSAGES.PRODUCT.VARIANT_NOT_FOUND });
     }
 
     // Update the variant
@@ -1163,13 +1163,13 @@ export const updateVariant = async (req, res) => {
     // Validate minimum images requirement
     if (variant.imageUrls.length < 3) {
       return res.status(400).json({ 
-        message: "Minimum 3 images required for a variant" 
+        message: MESSAGES.PRODUCT.MIN_IMAGES_VARIANT 
       });
     }
 
     await variant.save();
 
-    res.json({ message: "Variant updated successfully", variant });
+    res.json({ message: MESSAGES.PRODUCT.VARIANT_UPDATED, variant });
   } catch (error) {
     console.error("Update variant error:", error);
     res.status(500).json({ message: error.message });
@@ -1189,7 +1189,7 @@ export const addVariant = async (req, res) => {
     // Validate required fields
     if (!colour || !capacity || !price || !stock) {
       return res.status(400).json({
-        message: "Missing required fields",
+        message: MESSAGES.PRODUCT.MISSING_FIELDS,
         required: ["colour", "capacity", "price", "stock"],
         received: { colour, capacity, price, stock },
       });
@@ -1197,24 +1197,24 @@ export const addVariant = async (req, res) => {
 
     // Validate productId format
     if (!mongoose.Types.ObjectId.isValid(productId)) {
-      return res.status(400).json({ message: "Invalid product ID format" });
+      return res.status(400).json({ message: MESSAGES.PRODUCT.INVALID_ID });
     }
 
     // Check if product exists
     const product = await Product.findById(productId);
     if (!product) {
-      return res.status(404).json({ message: "Product not found" });
+      return res.status(404).json({ message: MESSAGES.PRODUCT.NOT_FOUND });
     }
 
     if (product.isDeleted) {
-      return res.status(404).json({ message: "Product has been deleted" });
+      return res.status(404).json({ message: MESSAGES.PRODUCT.PRODUCT_DELETED });
     }
 
     // Validate images
     const variantImages = req.files?.images || [];
     if (variantImages.length < 3) {
       return res.status(400).json({
-        message: "At least 3 images required",
+        message: MESSAGES.PRODUCT.MIN_IMAGES_VARIANT,
         imagesReceived: variantImages.length,
       });
     }
@@ -1272,11 +1272,11 @@ export const addVariant = async (req, res) => {
     const numericStock = Number(stock);
 
     if (isNaN(numericPrice) || numericPrice < 0) {
-      return res.status(400).json({ message: "Invalid price value" });
+      return res.status(400).json({ message: MESSAGES.PRODUCT.INVALID_PRICE });
     }
 
     if (isNaN(numericStock) || numericStock < 0) {
-      return res.status(400).json({ message: "Invalid stock value" });
+      return res.status(400).json({ message: MESSAGES.PRODUCT.INVALID_STOCK });
     }
 
     // Create new variant
@@ -1316,7 +1316,7 @@ export const addVariant = async (req, res) => {
     }
 
     res.status(201).json({
-      message: "Variant added successfully",
+      message: MESSAGES.PRODUCT.VARIANT_ADDED,
       variant,
       product,
     });
@@ -1329,17 +1329,17 @@ export const addVariant = async (req, res) => {
         (err) => err.message
       );
       return res.status(400).json({
-        message: "Validation error",
+        message: MESSAGES.PRODUCT.VALIDATION_ERROR,
         errors: validationErrors,
       });
     }
 
     if (error.name === "CastError") {
-      return res.status(400).json({ message: "Invalid data format" });
+      return res.status(400).json({ message: MESSAGES.PRODUCT.INVALID_DATA });
     }
 
     res.status(500).json({
-      message: "Internal Server Error",
+      message: MESSAGES.GENERAL.INTERNAL_SERVER_ERROR,
       error:
         process.env.NODE_ENV === "development"
           ? error.message
@@ -1401,7 +1401,7 @@ export const getPublicProducts = async (req, res) => {
     // Validate search input
     let searchTrimmed = typeof search === "string" ? search.trim() : "";
     if (searchTrimmed && !/^[\w\s.,'"!?-]{0,100}$/.test(searchTrimmed)) {
-      return res.status(400).json({ message: "Invalid search input." });
+      return res.status(400).json({ message: MESSAGES.PRODUCT.INVALID_SEARCH });
     }
 
     // console.log('Public products filter parameters:', { search, category, brand, variantColour, variantCapacity, minPrice, maxPrice, sort });
@@ -1729,7 +1729,7 @@ export const getPublicProductById = async (req, res) => {
     // Validate product ID format
     if (!mongoose.Types.ObjectId.isValid(id)) {
       // console.log('Invalid product ID format:', id);
-      return res.status(400).json({ message: "Invalid product ID format" });
+      return res.status(400).json({ message: MESSAGES.PRODUCT.INVALID_ID });
     }
 
     // console.log('Looking for product with ID:', id);
@@ -1798,13 +1798,13 @@ export const getPublicProductById = async (req, res) => {
 
     if (!product) {
       // console.log('Product not found in database');
-      return res.status(404).json({ message: "Product not found" });
+      return res.status(404).json({ message: MESSAGES.PRODUCT.NOT_FOUND });
     }
 
     // Check if product is deleted, blocked, or unavailable
     if (product.isDeleted || product.status !== "active") {
       // console.log('Product is not available:', { isDeleted: product.isDeleted, status: product.status });
-      return res.status(404).json({ message: "Product not available" });
+      return res.status(404).json({ message: MESSAGES.PRODUCT.PRODUCT_NOT_AVAILABLE });
     }
 
     // Calculate total stock from active variants
@@ -1851,6 +1851,6 @@ export const getPublicProductById = async (req, res) => {
     res.json(productData);
   } catch (error) {
     console.error("Error getting public product by ID:", error);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ message: MESSAGES.GENERAL.INTERNAL_SERVER_ERROR });
   }
 };
