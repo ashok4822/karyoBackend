@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import MongoStore from "connect-mongo";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
@@ -48,7 +49,7 @@ app.use(
     },
     credentials: true,
   })
-);``
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -60,6 +61,18 @@ app.use(
     secret: process.env.SESSION_SECRET || "your_secret",
     resave: false,
     saveUninitialized: false,
+    // Persist sessions in MongoDB so they survive Render restarts/redeploys
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGODB_URI,
+      ttl: 7 * 24 * 60 * 60, // 7 days (matches COOKIE_MAX_AGE_DAYS)
+      autoRemove: "native",
+    }),
+    cookie: {
+      secure: process.env.NODE_ENV === "production", // HTTPS only in production
+      httpOnly: true,
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: parseInt(process.env.COOKIE_MAX_AGE_DAYS || "7") * 24 * 60 * 60 * 1000,
+    },
   })
 );
 app.use(passport.initialize());
