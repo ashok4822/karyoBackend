@@ -2,7 +2,6 @@ services:
   - type: web
     name: karyo-backend
     runtime: node
-    rootDir: server          # folder inside your repo that contains the backend
     buildCommand: npm install
     startCommand: npm start
     envVars:
