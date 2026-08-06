@@ -400,7 +400,7 @@ export const requestEmailChangeOtp = [
     await Otp.create({ email, otp });
     // Send OTP email
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
       to: email,
       subject: "Your Email Change OTP Code",
       text: `Your OTP code is: ${otp}`,

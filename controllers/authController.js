@@ -247,7 +247,7 @@ export const requestOtp = async (req, res) => {
   await Otp.create({ email, otp });
   try {
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
       to: email,
       subject: "Your Signup OTP Code",
       text: `Your OTP code is: ${otp}`,
@@ -394,7 +394,7 @@ export const requestPasswordResetOtp = async (req, res) => {
   const otpDoc = await Otp.create({ email, otp });
   try {
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
       to: email,
       subject: "Your Password Reset OTP Code",
       text: `Your OTP code is: ${otp}`,
